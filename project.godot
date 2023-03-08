@@ -10,24 +10,36 @@ config_version=4
 
 _global_script_classes=[ {
 "base": "Object",
+"class": "Parser",
+"language": "GDScript",
+"path": "res://scripts/Parser.gd"
+}, {
+"base": "Object",
 "class": "PathObject",
 "language": "GDScript",
-"path": "res://Path.gd"
+"path": "res://scripts/Path.gd"
 }, {
 "base": "Object",
 "class": "SystemElement",
 "language": "GDScript",
-"path": "res://SystemElement.gd"
+"path": "res://scripts/SystemElement.gd"
 }, {
-"base": "Panel",
-"class": "Terminal",
+"base": "Object",
+"class": "Token",
 "language": "GDScript",
-"path": "res://Terminal.gd"
+"path": "res://scripts/Token.gd"
+}, {
+"base": "Object",
+"class": "Tokens",
+"language": "GDScript",
+"path": "res://scripts/Tokens.gd"
 } ]
 _global_script_class_icons={
+"Parser": "",
 "PathObject": "",
 "SystemElement": "",
-"Terminal": ""
+"Token": "",
+"Tokens": ""
 }
 
 [application]

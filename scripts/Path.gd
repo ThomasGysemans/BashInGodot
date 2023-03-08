@@ -37,8 +37,6 @@ func normalize_path(p: String) -> String:
 	var regex = RegEx.new()
 	regex.compile("\\/+")
 	var result = regex.search_all(p)
-	if result.empty():
-		return p # because it might be just the name of the relative destination, example: "cd folder"
 	for r in result:
 		p = p.replace(r.get_string(), "/")
 	return p

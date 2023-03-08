@@ -48,5 +48,7 @@ func is_hidden():
 func _to_string():
 	var string = filename if is_file() else "[color=green]" + filename + "[/color]\n"
 	for child in children:
+		if child.is_hidden():
+			continue
 		string += "   ".repeat(child.count_depth()) + "[color=gray]--[/color] " + child.to_string() + "\n"
 	return string

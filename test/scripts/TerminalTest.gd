@@ -236,6 +236,10 @@ func test_man() -> void:
 	for command in terminal.COMMANDS:
 		assert_str(_command("man", command.name).error).is_null()
 
+func test_help() -> void:
+	assert_str(_command("help", "").output).is_not_empty()
+	assert_str(_command("help", "yo").error).is_not_null()
+
 func test_echo() -> void:
 	assert_str(_command("echo", "a b c").output).is_equal("a b c\n")
 	assert_str(_command("echo", "a   b c").output).is_equal("a b c\n")

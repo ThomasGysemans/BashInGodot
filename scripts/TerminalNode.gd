@@ -1,3 +1,4 @@
+#warning-ignore-all:return_value_discarded
 extends Panel
 
 const INIT_TEXT = "Terminal M100 1.0.\nLe terminal fait maison [b]simplifié[/b].\nEntrez \"help\" si vous avez besoin d'aide.\n-----------------\n"

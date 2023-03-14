@@ -2,16 +2,6 @@
 extends Panel
 class_name Terminal
 
-# CANCELLED BECAUSE UNEXPLAINED BEHAVIOUR IN BASH
-# this regex matches the whole alphabet (including accents)
-# the modifier "i" is added here with "(?i)" even though it should not be necessary
-#const REGEX_ALPHA = "(?i)[A-zÀ-úûüÿŸœŒ]+"
-#const REGEX_DIGITS = "\\d+"
-#const REGEX_BLANK = "\\s+"
-#const REGEX_SPACE = "[ ]+"
-#const REGEX_LOWER = "[a-zà-úûüÿœ]+"
-#const REGEX_UPPER = "[A-ZÀ-ÙÛÜŸŒ]+"
-
 var COMMANDS := {
 	"man": {
 		"reference": funcref(self, "man"),
@@ -211,6 +201,16 @@ var COMMANDS := {
 				"mv folder otherfolder"
 			]
 		}
+	},
+	"help": {
+		"reference": funcref(self, "help"),
+		"manual": {
+			"name": "help - commande custom si vous avez besoin d'aide.",
+			"synopsis": ["[b]help[/b]"],
+			"description": "Cette commande est custom, elle permet d'obtenir de l'aide sur le fonctionnement même du terminal, ainsi que des indices si nécessaire.",
+			"options": [],
+			"examples": []
+		}
 	}
 }
 
@@ -321,7 +321,7 @@ func move(origin: SystemElement, destination: PathObject) -> bool:
 	origin_parent.children.erase(origin)
 	return true
 
-func cut_paragraph(paragraph: String, line_length: int) -> Array:
+func _cut_paragraph(paragraph: String, line_length: int) -> Array:
 	if paragraph.length() <= line_length:
 		return [paragraph]
 	var lines := []
@@ -337,23 +337,14 @@ func cut_paragraph(paragraph: String, line_length: int) -> Array:
 	lines.append(paragraph.substr(pos).strip_edges())
 	return lines
 
-func man(options: Array, _standard_input: String) -> Dictionary:
-	if options.size() != 1 or not options[0].is_word():
-		return {
-			"error": "le nom d'une commande est attendue."
-		}
-	if not options[0].value in COMMANDS:
-		return {
-			"error": "'" + options[0].value + "' est une commande inconnue"
-		}
+func build_manual_page_using(manual: Dictionary) -> String:
 	var output := ""
-	var manual: Dictionary = COMMANDS[options[0].value].manual
 	output += "[b]NOM[/b]\n\t" + manual.name + "\n\n"
 	output += "[b]SYNOPSIS[/b]\n"
 	for synopsis in manual.synopsis:
 		output += "\t" + synopsis
 	output += "\n\n[b]DESCRIPTION[/b]\n"
-	var description_lines := cut_paragraph(manual.description, 50)
+	var description_lines := _cut_paragraph(manual.description, 50)
 	for line in description_lines:
 		output += "\t" + line + "\n"
 	if not manual.options.empty():
@@ -365,8 +356,30 @@ func man(options: Array, _standard_input: String) -> Dictionary:
 		output += "\n[b]EXEMPLES[/b]\n"
 		for example in manual.examples:
 			output += "\t" + example + "\n"
+	return output
+
+func man(options: Array, _standard_input: String) -> Dictionary:
+	if options.size() != 1 or not options[0].is_word():
+		return {
+			"error": "le nom d'une commande est attendue."
+		}
+	if not options[0].value in COMMANDS:
+		return {
+			"error": "'" + options[0].value + "' est une commande inconnue"
+		}
 	return {
-		"output": output,
+		"output": build_manual_page_using(COMMANDS[options[0].value].manual),
+		"error": null
+	}
+
+# feature that should be overwritten to match the requirements of the game
+func help(options: Array, _standard_input: String) -> Dictionary:
+	if options.size() > 0:
+		return {
+			"error": "aucun argument n'est attendu"
+		}
+	return {
+		"output": build_manual_page_using(COMMANDS["help"].manual),
 		"error": null
 	}
 

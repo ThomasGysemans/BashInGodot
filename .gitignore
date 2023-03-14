@@ -1,1 +1,6 @@
 .import
+addons/
+runtest.*
+workspace.code-workspace
+GdUnitRunner.cfg
+LICENSE

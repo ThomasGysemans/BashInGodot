@@ -19,7 +19,7 @@ func _init(t: int, name: String, p, c = "", ch = []):
 	parent = p
 	content = c
 	children = ch
-	absolute_path = PathObject.new(parent + "/" + filename)
+	absolute_path = PathObject.new(parent + "/" + filename) if not parent.empty() else PathObject.new("/")
 	if content.length() > 0 and type == 1:
 		push_error("It is not possible for a folder to have content. The object was destroyed.\nInvalid file's name: " + filename)
 		self.free()
@@ -44,6 +44,22 @@ func is_folder():
 
 func is_hidden():
 	return filename.begins_with(".")
+
+func rename(new_name: String):
+	filename = new_name
+
+func move_inside_of(new_absolute_path):
+	if new_absolute_path is String:
+		absolute_path = PathObject.new(new_absolute_path + "/" + filename)
+	else:
+		absolute_path = PathObject.new(new_absolute_path.path + "/" + filename)
+	return self
+
+func equals(another: SystemElement):
+	if another == null: return false
+	if self.type == another.type and self.absolute_path.equals(another.absolute_path):
+		return true
+	return false
 
 func _to_string():
 	var string = filename if is_file() else "[color=green]" + filename + "[/color]\n"

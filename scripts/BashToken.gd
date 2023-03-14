@@ -1,5 +1,5 @@
 extends Object
-class_name Token
+class_name BashToken
 
 var type: String
 var value = null

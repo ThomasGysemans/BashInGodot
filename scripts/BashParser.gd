@@ -1,5 +1,5 @@
 extends Object
-class_name Parser
+class_name BashParser
 
 var command: String
 var tokens_list := []
@@ -18,7 +18,7 @@ func _init(c: String):
 # the very first item of the list is the name of a command, and the first "PLAIN" after a PIPE is also a command
 func _read(input: String) -> Array:
 	if input.empty():
-		return [Token.new(Tokens.EOF, null)]
+		return [BashToken.new(Tokens.EOF, null)]
 	var pos := 0
 	var result := []
 	var length = input.length()
@@ -33,13 +33,13 @@ func _read(input: String) -> Array:
 				return []
 			else:
 				pos += parsed_string.value.length() + 2
-			result.append(Token.new(Tokens.STRING, parsed_string.value))
+			result.append(BashToken.new(Tokens.STRING, parsed_string.value))
 		elif input[pos] == "|":
-			result.append(Token.new(Tokens.PIPE, null))
+			result.append(BashToken.new(Tokens.PIPE, null))
 		elif input[pos] == "-":
 			pos += 1
 			if pos >= length or input[pos] == " ":
-				result.append(Token.new(Tokens.PLAIN, "-"))
+				result.append(BashToken.new(Tokens.PLAIN, "-"))
 			else:
 				if input[pos] == "-":
 					pos += 1
@@ -48,23 +48,23 @@ func _read(input: String) -> Array:
 						flag_name += input[pos]
 						pos += 1
 					if flag_name.empty():
-						result.append(Token.new(Tokens.PLAIN, "--"))
+						result.append(BashToken.new(Tokens.PLAIN, "--"))
 					else:
-						result.append(Token.new(Tokens.LONG_FLAG, flag_name))
+						result.append(BashToken.new(Tokens.LONG_FLAG, flag_name))
 				else:
-					result.append(Token.new(Tokens.FLAG, input[pos]))
+					result.append(BashToken.new(Tokens.FLAG, input[pos]))
 					pos += 1
-					if pos < length and input[pos] != " ":
-						error = "Erreur de syntaxe : l'option '" + input[pos - 1] + "' est trop grande."
-						return []
+					while pos < length and input[pos] != " ":
+						result.append(BashToken.new(Tokens.FLAG, input[pos]))
+						pos += 1
 		else: # an identifier (Tokens.PLAIN)
 			var identifier = ""
 			while pos < length and input[pos] != " ":
 				identifier += input[pos]
 				pos += 1
-			result.append(Token.new(Tokens.PLAIN, identifier))
+			result.append(BashToken.new(Tokens.PLAIN, identifier))
 		pos += 1
-	result.append(Token.new(Tokens.EOF, null))
+	result.append(BashToken.new(Tokens.EOF, null))
 	return result
 
 func _read_string(content: String):
@@ -124,7 +124,7 @@ func parse() -> Array:
 	return commands
 
 func _parse_command(list:Array):
-	if list.size() == 0 or list[0].is_eof():
+	if list.empty() or list[0].is_eof():
 		return "Erreur de syntaxe : BASH attendait une commande mais il n'y a rien."
 	if list[0].type != Tokens.PLAIN:
 		return "Erreur de syntaxe : '" + str(list[0].value) + "' n'est pas une commande."

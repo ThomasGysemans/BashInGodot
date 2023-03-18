@@ -25,7 +25,8 @@ func after_test() -> void:
 	terminal.free()
 
 func _command(command_name: String, arguments: String, standard_input: String = "") -> Dictionary:
-	return terminal.COMMANDS[command_name].reference.call_func(BashParser.new(command_name + " " + arguments).parse()[0].options, standard_input)
+	var parsing := BashParser.new(command_name + " " + arguments).parse()
+	return terminal.COMMANDS[command_name].reference.call_func(parsing[0].options, parsing[0].redirections, standard_input)
 
 func _eof_token() -> BashToken:
 	return BashToken.new(Tokens.EOF, null)
@@ -45,6 +46,13 @@ func test_bashtoken() -> void:
 	assert_bool(BashToken.new(Tokens.PLAIN, "yoyo").is_word()).is_true()
 	assert_bool(BashToken.new(Tokens.PIPE, null).is_pipe()).is_true()
 	assert_bool(BashToken.new(Tokens.EOF, null).is_eof()).is_true()
+	assert_bool(BashToken.new(Tokens.APPEND_WRITING_REDIRECTION, null).is_append_writing_redirection()).is_true()
+	assert_bool(BashToken.new(Tokens.WRITING_REDIRECTION, null).is_writing_redirection()).is_true()
+	assert_bool(BashToken.new(Tokens.READING_REDIRECTION, null).is_reading_redirection()).is_true()
+	assert_bool(BashToken.new(Tokens.APPEND_WRITING_REDIRECTION, null).is_redirection()).is_true()
+	assert_bool(BashToken.new(Tokens.WRITING_REDIRECTION, null).is_redirection()).is_true()
+	assert_bool(BashToken.new(Tokens.READING_REDIRECTION, null).is_redirection()).is_true()
+	assert_bool(BashToken.new(Tokens.AND, null).is_and()).is_true()
 
 func test_system_element() -> void:
 	assert_str(SystemElement.new(0, ".gitignore", "/").filename).is_equal(".gitignore")
@@ -95,6 +103,16 @@ func test_simplify_path() -> void:
 	assert_str(PathObject.simplify_path("../")).is_equal("../")
 	assert_str(PathObject.simplify_path("../..")).is_equal("../..")
 
+func test_strings() -> void:
+	var lexer := BashParser.new('echo -n "C\'est nice"')
+	assert_str(lexer.error).is_empty()
+	assert_array(lexer.tokens_list).contains_exactly([
+		BashToken.new(Tokens.PLAIN, "echo"),
+		BashToken.new(Tokens.FLAG, "n"),
+		BashToken.new(Tokens.STRING, "C'est nice"),
+		_eof_token()
+	])
+
 func test_lexer_simple_echo() -> void:
 	var lexer := BashParser.new("echo -n 'yoyo'")
 	var list := lexer.tokens_list
@@ -136,6 +154,98 @@ func test_lexer_flags() -> void:
 		_eof_token()
 	])
 
+func test_lexer_with_numbered_redirections() -> void:
+	var lexer := BashParser.new("cat file.txt 1>yoyo.txt 2<yoyo.txt 0>ksks")
+	var list := lexer.tokens_list
+	assert_array(list).contains_exactly([
+		BashToken.new(Tokens.PLAIN, "cat"),
+		BashToken.new(Tokens.PLAIN, "file.txt"),
+		BashToken.new(Tokens.DESCRIPTOR, 1),
+		BashToken.new(Tokens.WRITING_REDIRECTION, null),
+		BashToken.new(Tokens.PLAIN, "yoyo.txt"),
+		BashToken.new(Tokens.DESCRIPTOR, 2),
+		BashToken.new(Tokens.READING_REDIRECTION, null),
+		BashToken.new(Tokens.PLAIN, "yoyo.txt"),
+		BashToken.new(Tokens.DESCRIPTOR, 0),
+		BashToken.new(Tokens.WRITING_REDIRECTION, null),
+		BashToken.new(Tokens.PLAIN, "ksks"),
+		_eof_token()
+	])
+
+func test_lexer_with_default_redirection() -> void:
+	var lexer := BashParser.new("cat file.txt >yoyo.txt <yoyo.txt")
+	var list := lexer.tokens_list
+	assert_array(list).contains_exactly([
+		BashToken.new(Tokens.PLAIN, "cat"),
+		BashToken.new(Tokens.PLAIN, "file.txt"),
+		BashToken.new(Tokens.WRITING_REDIRECTION, null),
+		BashToken.new(Tokens.PLAIN, "yoyo.txt"),
+		BashToken.new(Tokens.READING_REDIRECTION, null),
+		BashToken.new(Tokens.PLAIN, "yoyo.txt"),
+		_eof_token()
+	])
+
+func test_lexer_with_default_appending_redirection() -> void:
+	var lexer := BashParser.new("cat file.txt >>yoyo.txt")
+	var list := lexer.tokens_list
+	assert_array(list).contains_exactly([
+		BashToken.new(Tokens.PLAIN, "cat"),
+		BashToken.new(Tokens.PLAIN, "file.txt"),
+		BashToken.new(Tokens.APPEND_WRITING_REDIRECTION, null),
+		BashToken.new(Tokens.PLAIN, "yoyo.txt"),
+		_eof_token()
+	])
+
+func test_lexer_with_numbered_appending_redirection() -> void:
+	var lexer := BashParser.new("cat file.txt 2>>yoyo.txt")
+	var list := lexer.tokens_list
+	assert_array(list).contains_exactly([
+		BashToken.new(Tokens.PLAIN, "cat"),
+		BashToken.new(Tokens.PLAIN, "file.txt"),
+		BashToken.new(Tokens.DESCRIPTOR, 2),
+		BashToken.new(Tokens.APPEND_WRITING_REDIRECTION, null),
+		BashToken.new(Tokens.PLAIN, "yoyo.txt"),
+		_eof_token()
+	])
+
+func test_lexer_with_copied_redirection() -> void:
+	var lexer := BashParser.new("cat file 2>file.txt 1>&2")
+	assert_array(lexer.tokens_list).contains_exactly([
+		BashToken.new(Tokens.PLAIN, "cat"),
+		BashToken.new(Tokens.PLAIN, "file"),
+		BashToken.new(Tokens.DESCRIPTOR, 2),
+		BashToken.new(Tokens.WRITING_REDIRECTION, null),
+		BashToken.new(Tokens.PLAIN, "file.txt"),
+		BashToken.new(Tokens.DESCRIPTOR, 1),
+		BashToken.new(Tokens.WRITING_REDIRECTION, null),
+		BashToken.new(Tokens.AND, null),
+		BashToken.new(Tokens.DESCRIPTOR, 2),
+		_eof_token()
+	])
+
+func test_lexer_with_no_actual_redirection() -> void:
+	var lexer := BashParser.new("echo 2 1 y 0yo 3")
+	var list := lexer.tokens_list
+	assert_array(list).contains_exactly([
+		BashToken.new(Tokens.PLAIN, "echo"),
+		BashToken.new(Tokens.PLAIN, "2"),
+		BashToken.new(Tokens.PLAIN, "1"),
+		BashToken.new(Tokens.PLAIN, "y"),
+		BashToken.new(Tokens.PLAIN, "0yo"),
+		BashToken.new(Tokens.PLAIN, "3"),
+		_eof_token()
+	])
+
+func test_lexer_with_appending_redirection_and_fake_descriptor() -> void:
+	var lexer := BashParser.new("echo 2>>1")
+	assert_array(lexer.tokens_list).contains_exactly([
+		BashToken.new(Tokens.PLAIN, "echo"),
+		BashToken.new(Tokens.DESCRIPTOR, 2),
+		BashToken.new(Tokens.APPEND_WRITING_REDIRECTION, null),
+		BashToken.new(Tokens.PLAIN, "1"),
+		_eof_token()
+	])
+
 func test_parser() -> void:
 	var lexer := BashParser.new("rm -dr --verbose / | echo yoyo")
 	var result := lexer.parse()
@@ -147,14 +257,101 @@ func test_parser() -> void:
 			BashToken.new(Tokens.FLAG, "r"),
 			BashToken.new(Tokens.LONG_FLAG, "verbose"),
 			BashToken.new(Tokens.PLAIN, "/"),
-		]
+		],
+		"redirections": []
 	})
 	assert_object(result[1]).is_equal({
 		"name": "echo",
 		"options": [
 			BashToken.new(Tokens.PLAIN, "yoyo")
+		],
+		"redirections": []
+	})
+
+func test_parser_with_redirections() -> void:
+	var lexer := BashParser.new("cat file.txt 1>other.txt 2>&1")
+	var result := lexer.parse()
+	assert_str(lexer.error).is_empty()
+	assert_int(result.size()).is_equal(1)
+	assert_object(result[0]).is_equal({
+		"name": "cat",
+		"options": [
+			BashToken.new(Tokens.PLAIN, "file.txt")
+		],
+		"redirections": [
+			{
+				"port": 1,
+				"type": Tokens.WRITING_REDIRECTION,
+				"target": "other.txt",
+				"copied": false
+			},
+			{
+				"port": 2,
+				"type": Tokens.WRITING_REDIRECTION,
+				"target": 1,
+				"copied": true
+			}
 		]
 	})
+
+func test_parser_with_redirections_error() -> void:
+	var lexer := BashParser.new("echo yoyo 1<file.txt")
+	var result := lexer.parse()
+	assert_str(lexer.error).is_not_empty()
+
+func test_interpret_redirections() -> void:
+	var redirections = BashParser.new("echo omg 1>file.txt 2>&1 1>&2").parse()[0].redirections
+	var interpretation = terminal.interpret_redirections(redirections)
+	assert_object(interpretation[0]).is_null()
+	assert_object(interpretation[1]).is_not_null()
+	assert_object(interpretation[2]).is_not_null()
+	assert_object(interpretation[1].target).is_equal(terminal.get_file_element_at(PathObject.new("/file.txt")))
+	assert_object(interpretation[2].target).is_equal(terminal.get_file_element_at(PathObject.new("/file.txt")))
+	assert_str(interpretation[1].type).is_equal(Tokens.WRITING_REDIRECTION)
+	assert_str(interpretation[2].type).is_equal(Tokens.WRITING_REDIRECTION)
+
+func test_interpret_complex_redirections() -> void:
+	var redirections = BashParser.new("cat 0<file.txt 2>file2.txt 2>&2 2>&2 2>&2 1>>file2.txt").parse()[0].redirections
+	var interpretation = terminal.interpret_redirections(redirections)
+	assert_object(interpretation[0]).is_not_null()
+	assert_object(interpretation[1]).is_not_null()
+	assert_object(interpretation[2]).is_not_null()
+	assert_object(interpretation[0].target).is_equal(terminal.get_file_element_at(PathObject.new("/file.txt")))
+	assert_object(interpretation[1].target).is_equal(terminal.get_file_element_at(PathObject.new("/file2.txt")))
+	assert_object(interpretation[2].target).is_equal(terminal.get_file_element_at(PathObject.new("/file2.txt")))
+	assert_str(interpretation[0].type).is_equal(Tokens.READING_REDIRECTION)
+	assert_str(interpretation[1].type).is_equal(Tokens.APPEND_WRITING_REDIRECTION)
+	assert_str(interpretation[2].type).is_equal(Tokens.WRITING_REDIRECTION)
+
+func test_execute() -> void:
+	assert_str(terminal.execute("echo yoyo")).is_empty()
+	assert_str(terminal.execute("yoyo")).is_not_empty()
+	assert_str(terminal.execute("_process")).is_not_empty()
+
+func test_execute_with_simple_redirections() -> void:
+	assert_str(terminal.execute("echo -n yoyo 1>file.txt 2>error.txt")).is_empty()
+	assert_str(terminal.get_file_element_at(PathObject.new("file.txt")).content).is_equal("yoyo")
+	assert_object(terminal.get_file_element_at(PathObject.new("error.txt"))).is_not_null()
+	assert_str(terminal.get_file_element_at(PathObject.new("error.txt")).content).is_empty()
+
+func test_execute_with_complex_redirections() -> void:
+	var previous_content: String = terminal.get_file_element_at(PathObject.new("file.txt")).content
+	assert_str(terminal.execute("echo -n yoyo 1>>file.txt 2>>file.txt")).is_empty()
+	assert_str(terminal.get_file_element_at(PathObject.new("file.txt")).content).is_equal(previous_content + "yoyo")
+
+func test_execute_with_custom_standard_input() -> void:
+	terminal.get_file_element_at(PathObject.new("file.txt")).content = "hello"
+	assert_str(terminal.execute("tr e a 0<file.txt 1>result.txt")).is_empty()
+	assert_str(terminal.get_file_element_at(PathObject.new("result.txt")).content).is_equal("hallo")
+
+func test_execute_with_redirected_error() -> void:
+	assert_str(terminal.execute("cat imaginary_file.txt 2>error.txt | rm file.txt")).is_empty()
+	assert_object(terminal.get_file_element_at(PathObject.new("file.txt"))).is_not_null() # meaning `rm file.txt` was not executed
+	assert_object(terminal.get_file_element_at(PathObject.new("error.txt"))).is_not_null()
+	assert_str(terminal.get_file_element_at(PathObject.new("error.txt")).content).is_equal(terminal.execute("cat imaginary_file.txt"))
+
+func test_execute_with_mistaken_redirection() -> void:
+	assert_str(terminal.execute("tr y t 0<imaginary_file.txt")).is_not_empty() # meaning an error was thrown
 
 func test_get_file_element_at() -> void:
 	assert_str(terminal.get_file_element_at(PathObject.new("/")).absolute_path.path).is_equal("/")
@@ -234,7 +431,7 @@ func test_man() -> void:
 	assert_str(_command("man", "").error).is_not_null()
 	assert_str(_command("man", "yo yo").error).is_not_null()
 	for command in terminal.COMMANDS:
-		assert_str(_command("man", command.name).error).is_null()
+		assert_str(_command("man", command).error).is_null()
 
 func test_help() -> void:
 	assert_str(_command("help", "").output).is_not_empty()

@@ -1,0 +1,7 @@
+RewriteEngine On
+RewriteCond %{HTTP_HOST} !^godot-bash. 
+RewriteRule ^(.*)$   https://%1/$1  [L]
+
+RewriteEngine on
+RewriteCond %{HTTPS} !=on
+RewriteRule .* https://%{HTTP_HOST}%{REQUEST_URI} [R=301]

@@ -70,30 +70,9 @@ func _on_command_entered(new_text: String):
 	history.append(new_text)
 	history_index = history.size()
 	_print_command(new_text)
-	var parser = BashParser.new(new_text)
-	if not parser.error.empty():
-		return _print_error(parser.error)
-	var parsing = parser.parse()
-	if not parser.error.empty():
-		return _print_error(parser.error)
-	var standard_input = ""
-	for command in parsing:
-		var function = terminal.COMMANDS[command.name] if command.name in terminal.COMMANDS else null
-		if function == null or not function.reference.is_valid() or command.name.begins_with("_"):
-			# Because of the way we handle commands,
-			# we must make sure that the user cannot execute functions
-			# such as '_process' or '_ready'.
-			return _print_error("Cette commande n'existe pas.")
-		else:
-			var result = function.reference.call_func(command.options, standard_input)
-			if result.error != null:
-				return _print_error("Commande '" + command.name + "' : " + result.error)
-			else:
-				if command.name == "clear":
-					interface.text = ""
-				standard_input = result.output
-	if not standard_input.empty():
-		interface.append_bbcode(standard_input)
+	var result := terminal.execute(new_text, interface)
+	if not result.empty():
+		_print_error(result)
 
 func _print_command(command: String):
 	interface.append_bbcode("$ " +  command + "\n")

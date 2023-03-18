@@ -211,6 +211,16 @@ var COMMANDS := {
 			"options": [],
 			"examples": []
 		}
+	},
+	"tree": {
+		"reference": funcref(self, "tree"),
+		"manual": {
+			"name": "tree - affiche une reconstitution de l'arborescence du dossier courant",
+			"synopsis": ["[b]tree[/b]"],
+			"description": "Cette commande est utile pour afficher le contenu du dossier courant, ainsi que le contenu des sous-dossiers, de façon à avoir une vue globale de l'environnement de travail. En revanche, elle ne permet pas de visualiser les fichiers cachés.",
+			"options": [],
+			"examples": []
+		}
 	}
 }
 
@@ -222,6 +232,53 @@ var system_tree := SystemElement.new(1, "/", "", "", [
 		SystemElement.new(0, ".secret", "/folder", "this is a secret")
 	])
 ])
+
+func execute(input: String, interface: RichTextLabel = null) -> String:
+	var parser := BashParser.new(input)
+	if not parser.error.empty():
+		return parser.error
+	var parsing := parser.parse()
+	if not parser.error.empty():
+		return parser.error
+	var standard_input := ""
+	for command in parsing:
+		var function = COMMANDS[command.name] if command.name in COMMANDS else null
+		# Because of the way we handle commands,
+		# we must make sure that the user cannot execute functions
+		# such as '_process' or '_ready'.
+		if function == null or not function.reference.is_valid() or command.name.begins_with("_"):
+			return "Cette commande n'existe pas."
+		else:
+			var command_redirections = interpret_redirections(command.redirections)
+			for i in range(0, command_redirections.size()):
+				if command_redirections[i] != null and command_redirections[i].target == null:
+					return "Impossible de localiser, ni de créer, la destination du descripteur " + str(i) + "."
+			var result = function.reference.call_func(command.options, command.redirections, command_redirections[0].target.content if command_redirections[0] != null else standard_input)
+			if command_redirections[2] != null:
+				if result.error == null:
+					if command_redirections[2].type == Tokens.WRITING_REDIRECTION:
+						command_redirections[2].target.content = ""
+				else:
+					if command_redirections[2].type == Tokens.WRITING_REDIRECTION:
+						command_redirections[2].target.content = "Commande '" + command.name + "' : " + result.error
+					elif command_redirections[2].type == Tokens.APPEND_WRITING_REDIRECTION:
+						command_redirections[2].target.content += "Commande '" + command.name + "' : " + result.error
+					return "" # if there is an error, we have to stop the program anyway
+			if result.error != null:
+				return "Commande '" + command.name + "' : " + result.error
+			else:
+				if command_redirections[1] != null:
+					if command_redirections[1].type == Tokens.WRITING_REDIRECTION:
+						command_redirections[1].target.content = result.output
+					elif command_redirections[1].type == Tokens.APPEND_WRITING_REDIRECTION:
+						command_redirections[1].target.content += result.output
+				else:
+					standard_input = result.output
+				if interface != null and command.name == "clear":
+					interface.text = ""
+	if interface != null and not standard_input.empty():
+		interface.append_bbcode(standard_input)
+	return ""
 
 func get_file_element_at(path: PathObject):
 	if not path.is_valid:
@@ -358,10 +415,55 @@ func build_manual_page_using(manual: Dictionary) -> String:
 			output += "\t" + example + "\n"
 	return output
 
-func man(options: Array, _standard_input: String) -> Dictionary:
-	if options.size() != 1 or not options[0].is_word():
+# When we have redirections,
+# if the file doesn't exist on the standard output,
+# then we must create it.
+func get_file_or_make_it(path: PathObject):
+	if not path.is_valid or path.is_leading_to_folder():
+		return null
+	var element: SystemElement = get_file_element_at(path)
+	if not element == null:
+		return element
+	var parent_element = get_parent_element_from(path)
+	if parent_element == null or not parent_element.is_folder():
+		return null
+	var new_file := SystemElement.new(0, path.file_name, parent_element.absolute_path.path)
+	parent_element.append(new_file)
+	return new_file
+
+# Read the redirections of a command
+# in order to make the following model:
+# [standard_input, standard_output, error_output]
+# where all three are either null or an object:
+# { "type": String (Tokens.WRITING_REDIRECTION for example), "target": SystemElement }
+func interpret_redirections(redirections: Array) -> Array:
+	var result := [null, null, null]
+	for i in range(0, redirections.size()):
+		if redirections[i].copied:
+			result[redirections[i].port] = result[redirections[i].target]
+		else:
+			result[redirections[i].port] = redirections[i]
+	if result[0] != null:
+		result[0] = {
+			"type": result[0].type,
+			"target": get_file_element_at(PathObject.new(result[0].target)) # if it doesn't exist, we ignore
+		}
+	for i in range(1, result.size()):
+		if result[i] != null:
+			result[i] = {
+				"type": result[i].type,
+				"target": get_file_or_make_it(PathObject.new(result[i].target))
+			}
+	return result
+
+func man(options: Array, redirections: Array, _standard_input: String) -> Dictionary:
+	if options.size() == 0:
 		return {
-			"error": "le nom d'une commande est attendue."
+			"error": "quelle page du manuel désirez-vous ?"
+		}
+	if options.size() > 1 or not options[0].is_word():
+		return {
+			"error": "uniquement le nom d'une commande est attendue."
 		}
 	if not options[0].value in COMMANDS:
 		return {
@@ -373,7 +475,7 @@ func man(options: Array, _standard_input: String) -> Dictionary:
 	}
 
 # feature that should be overwritten to match the requirements of the game
-func help(options: Array, _standard_input: String) -> Dictionary:
+func help(options: Array, redirections: Array, _standard_input: String) -> Dictionary:
 	if options.size() > 0:
 		return {
 			"error": "aucun argument n'est attendu"
@@ -383,7 +485,7 @@ func help(options: Array, _standard_input: String) -> Dictionary:
 		"error": null
 	}
 
-func echo(options: Array, _standard_input: String) -> Dictionary:
+func echo(options: Array, redirections: Array, _standard_input: String) -> Dictionary:
 	var to_display := ""
 	var line_break := true
 	for option in options:
@@ -402,7 +504,7 @@ func echo(options: Array, _standard_input: String) -> Dictionary:
 		"error": null
 	}
 
-func grep(options: Array, standard_input: String) -> Dictionary:
+func grep(options: Array, redirections: Array, standard_input: String) -> Dictionary:
 	if standard_input.empty():
 		return {
 			"error": "Une entrée standard doit être spécifiée"
@@ -429,7 +531,7 @@ func grep(options: Array, standard_input: String) -> Dictionary:
 # `tr` already exists and cannot be redefined to match the required signature,
 # hence the "_" at the end of the functions' name, which will be ignored by the interpreter.
 # Such exception must be handled manually.
-func tr_(options: Array, standard_input: String) -> Dictionary:
+func tr_(options: Array, redirections: Array, standard_input: String) -> Dictionary:
 	if standard_input.empty() or options.size() != 2:
 		return {
 			"error": "deux pattern doivent être spécifiés"
@@ -459,7 +561,7 @@ func tr_(options: Array, standard_input: String) -> Dictionary:
 		"error": null
 	}
 
-func cat(options: Array, _standard_input: String) -> Dictionary:
+func cat(options: Array, redirections: Array, _standard_input: String) -> Dictionary:
 	if options.size() > 1:
 		return { "error": "trop d'arguments" }
 	if options.size() == 0:
@@ -478,7 +580,7 @@ func cat(options: Array, _standard_input: String) -> Dictionary:
 		"error": null
 	}
 
-func ls(options: Array, _standard_input: String) -> Dictionary:
+func ls(options: Array, redirections: Array, _standard_input: String) -> Dictionary:
 	var target = null
 	var hide_secret_elements = true
 	if options.size() == 0:
@@ -548,19 +650,19 @@ func ls(options: Array, _standard_input: String) -> Dictionary:
 		"error": null
 	}
 
-func clear(_options: Array, _standard_input: String) -> Dictionary:
+func clear(_options: Array, redirections: Array, _standard_input: String) -> Dictionary:
 	return {
 		"output": "",
 		"error": null
 	}
 
-func tree(_options: Array, _standard_input: String) -> Dictionary:
+func tree(_options: Array, redirections: Array, _standard_input: String) -> Dictionary:
 	return {
 		"output": get_pwd_file_element().to_string(), # this is using the default _to_string methods recursively on the children of the root
 		"error": null
 	}
 
-func pwd(options: Array, _standard_input: String) -> Dictionary:
+func pwd(options: Array, redirections: Array, _standard_input: String) -> Dictionary:
 	if options.size() != 0:
 		return {
 			"error": "aucun argument n'est attendu."
@@ -570,7 +672,7 @@ func pwd(options: Array, _standard_input: String) -> Dictionary:
 		"error": null
 	}
 
-func cd(options: Array, _standard_input: String) -> Dictionary:
+func cd(options: Array, redirections: Array, _standard_input: String) -> Dictionary:
 	if options.size() == 0:
 		PWD = PathObject.new("/")
 		return { "output": "", "error": null }
@@ -602,7 +704,7 @@ func cd(options: Array, _standard_input: String) -> Dictionary:
 		"error": null
 	}
 
-func touch(options: Array, _standard_input: String) -> Dictionary:
+func touch(options: Array, redirections: Array, _standard_input: String) -> Dictionary:
 	if options.size() == 0 or not options[0].is_word():
 		return {
 			"error": "un chemin est attendu en argument"
@@ -639,7 +741,7 @@ func touch(options: Array, _standard_input: String) -> Dictionary:
 		"error": null
 	}
 
-func mkdir(options: Array, _standard_input: String) -> Dictionary:
+func mkdir(options: Array, redirections: Array, _standard_input: String) -> Dictionary:
 	if options.size() == 0 or not options[0].is_word():
 		return {
 			"error": "un chemin valide est attendu"
@@ -671,7 +773,7 @@ func mkdir(options: Array, _standard_input: String) -> Dictionary:
 		"error": null
 	}
 
-func rm(options: Array, _standard_input: String) -> Dictionary:
+func rm(options: Array, redirections: Array, _standard_input: String) -> Dictionary:
 	if options.size() == 0:
 		return {
 			"error": "une destination est attendue"
@@ -741,7 +843,7 @@ func rm(options: Array, _standard_input: String) -> Dictionary:
 		"error": null
 	}
 
-func cp(options: Array, _standard_input: String) -> Dictionary:
+func cp(options: Array, redirections: Array, _standard_input: String) -> Dictionary:
 	if options.size() != 2:
 		return {
 			"error": "deux chemins sont attendus"
@@ -834,7 +936,7 @@ func cp(options: Array, _standard_input: String) -> Dictionary:
 		"error": null
 	}
 
-func mv(options: Array, _standard_input: String) -> Dictionary:
+func mv(options: Array, redirections: Array, _standard_input: String) -> Dictionary:
 	if options.size() != 2 or not options[0].is_word() or not options[1].is_word():
 		return {
 			"error": "deux chemins valides sont attendus"

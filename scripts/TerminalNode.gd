@@ -13,7 +13,6 @@ var history_index := 0 # the position in the history. Except if travelling throu
 func _ready():
 	interface.append_bbcode(INIT_TEXT)
 
-# TODO: l'autocomplétion des noms de fichier doit se baser sur le chemin qu'on est en train d'écrire
 # TODO: ajout du Token group pour pouvoir faire mkdir baste/{toto,tata}
 
 func _process(_delta):
@@ -32,18 +31,24 @@ func _process(_delta):
 	if Input.is_action_just_pressed("autocompletion"):
 		prompt.grab_focus()
 		if not prompt.text.empty():
-			var element = terminal.get_pwd_file_element()
-			var possibilites = [] # array of string containing the possible names to autocomplete with
-			var word_position = prompt.text.find_last(" ")
+			var possibilites := [] # array of string containing the possible names to autocomplete with
+			var word_position := prompt.text.find_last(" ")
 			if word_position == -1:
 				word_position = 0
-			var word_to_complete = prompt.text.right(word_position).strip_edges()
+			var full_path := prompt.text.right(word_position).strip_edges()
+			var base_dir := full_path.left(full_path.find("/")) + "/" if full_path.find("/") != -1 else ""
+			var word_to_complete := ""
+			if full_path.find("/") != -1:
+				word_to_complete = full_path.right(full_path.find("/") + 1)
+			else:
+				word_to_complete = full_path
+			var element = terminal.get_parent_element_from(PathObject.new(full_path)) if not word_to_complete.empty() else terminal.get_file_element_at(PathObject.new(full_path))
 			for child in element.children:
 				if child.filename.begins_with(word_to_complete):
 					possibilites.append(child.filename)
 			if possibilites.size() > 0:
 				if possibilites.size() == 1:
-					prompt.text = (prompt.text.substr(0, word_position) + " " + possibilites[0]).strip_edges()
+					prompt.text = (prompt.text.substr(0, word_position) + " " + base_dir + possibilites[0]).strip_edges()
 				else:
 					var pos = word_to_complete.length()
 					var word = possibilites[0].substr(0, pos)
@@ -61,7 +66,7 @@ func _process(_delta):
 					word = word.substr(0, word.length() - 1)
 					if word == word_to_complete:
 						return # useless to change the text
-					prompt.text = (prompt.text.substr(0, word_position) + " " + word).strip_edges()
+					prompt.text = (prompt.text.substr(0, word_position) + " " + base_dir + word).strip_edges()
 				prompt.grab_focus()
 				prompt.set_cursor_position(prompt.text.length())
 

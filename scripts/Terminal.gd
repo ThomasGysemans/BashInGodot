@@ -2,6 +2,15 @@
 extends Panel
 class_name Terminal
 
+var user_name := "vous"
+var group_name := "votre_groupe"
+var PWD := PathObject.new("/") # the absolute path we are currently on in the system_tree
+var system_tree := SystemElement.new(1, "/", "", "", [], user_name, group_name)
+var error_handler := ErrorHandler.new() # this will be used in case specific erros happen deep into the logic
+
+func _display_error_or(error: String):
+	return error_handler.clear() if error_handler.has_error else error
+
 var COMMANDS := {
 	"man": {
 		"reference": funcref(self, "man"),
@@ -221,17 +230,32 @@ var COMMANDS := {
 			"options": [],
 			"examples": []
 		}
+	},
+	"chmod": {
+		"reference": funcref(self, "chmod"),
+		"manual": {
+			"name": "chmod - définis les permissions accordées à un élément",
+			"synopsis": ["[b]chmod[/b] [u]mode[/u] [u]fichier[/u]"],
+			"description": "Il y a trois catégories (utilisateur, groupe, autres) qui ont chacune trois type d'autorisations : lecture (r), écriture (w), exécution/franchissement (x). Les permissions s'écrivent \"-rwx--xr--\" où le premier caractère est soit \"d\" pour un dossier, ou \"-\" pour un fichier et où l'utilisateur a les droits combinés \"rwx\" (lecture, écriture et exécution) et où le groupe a les droits d'exécution seulement et les autres le droit de lecture uniquement. En règle générale, les permissions sont données sous la forme de trois chiffres en octal dont la somme est une combinaison unique : 4 pour la lecture, 2 pour l'écriture et 1 pour l'exécution. Par défaut un fichier, à sa création, a les droits 644. Accordez ou retirez un droit spécifique avec \"chmod u+x file.txt\" (raccourcie en \"chmod +x file.txt\" quand il s'agit de l'utilisateur, ([b]u[/b] pour utilisateur, [b]g[/b] pour groupe, [b]o[/b] pour autres)), ou détaillez la règle en octal à appliquer sur les trois catégories (\"chmod 657 file.txt\").",
+			"options": [],
+			"examples": [
+				"chmod u+x file.txt",
+				"chmod g-x folder/",
+				"chmod o-r folder/",
+				"chmod 007 file.txt"
+			]
+		}
 	}
 }
 
-var PWD := PathObject.new("/") # the absolute path we are currently on in the system_tree
-var system_tree := SystemElement.new(1, "/", "", "", [
-	SystemElement.new(0, "file.txt", "/", "Ceci est le contenu du fichier."),
-	SystemElement.new(1, "folder", "/", "", [
-		SystemElement.new(0, "answer_to_life.txt", "/folder", "42"),
-		SystemElement.new(0, ".secret", "/folder", "this is a secret")
-	])
-])
+func set_root(children: Array) -> void:
+	system_tree.children = children
+
+func _write_to_redirection(redirection: Dictionary, output: String) -> void:
+	if redirection.type == Tokens.WRITING_REDIRECTION:
+		redirection.target.content = output
+	elif redirection.type == Tokens.APPEND_WRITING_REDIRECTION:
+		redirection.target.content += output
 
 func execute(input: String, interface: RichTextLabel = null) -> String:
 	var parser := BashParser.new(input)
@@ -250,10 +274,12 @@ func execute(input: String, interface: RichTextLabel = null) -> String:
 			return "Cette commande n'existe pas."
 		else:
 			var command_redirections = interpret_redirections(command.redirections)
+			if error_handler.has_error:
+				return "Commande '" + command.name + "' : " + error_handler.clear()
 			for i in range(0, command_redirections.size()):
 				if command_redirections[i] != null and command_redirections[i].target == null:
 					return "Impossible de localiser, ni de créer, la destination du descripteur " + str(i) + "."
-			var result = function.reference.call_func(command.options, command.redirections, command_redirections[0].target.content if command_redirections[0] != null else standard_input)
+			var result = function.reference.call_func(command.options, command_redirections[0].target.content if command_redirections[0] != null and command_redirections[0].type == Tokens.READING_REDIRECTION else standard_input)
 			if command_redirections[2] != null:
 				if result.error == null:
 					if command_redirections[2].type == Tokens.WRITING_REDIRECTION:
@@ -267,11 +293,16 @@ func execute(input: String, interface: RichTextLabel = null) -> String:
 			if result.error != null:
 				return "Commande '" + command.name + "' : " + result.error
 			else:
+				if command_redirections[0] != null:
+					# Even though it doesn't make any sense to try to write something
+					# to the standard input, Bash overwrites the content of the target anyway.
+					# We have to reproduce the same behaviour, no matter how weird it sounds.
+					# The output to apply on the standard input would always be an empty string.
+					# If the standard input doesn't have a writing redirection (> or >>),
+					# then this function won't do anything.
+					_write_to_redirection(command_redirections[0], "")
 				if command_redirections[1] != null:
-					if command_redirections[1].type == Tokens.WRITING_REDIRECTION:
-						command_redirections[1].target.content = result.output
-					elif command_redirections[1].type == Tokens.APPEND_WRITING_REDIRECTION:
-						command_redirections[1].target.content += result.output
+					_write_to_redirection(command_redirections[1], result.output)
 				else:
 					standard_input = result.output
 				if interface != null and command.name == "clear":
@@ -280,15 +311,19 @@ func execute(input: String, interface: RichTextLabel = null) -> String:
 		interface.append_bbcode(standard_input)
 	return ""
 
+# Returns the SystemElement instance located at the given path.
+# Returns null if the element doesn't exist,
+# or returns false if a particular error happened during the process,
+# such as denial of permission (x)
 func get_file_element_at(path: PathObject):
-	if not path.is_valid:
-		return null
 	var base: SystemElement
 	if path.is_absolute():
 		base = system_tree
 		var found = false
 		for i in range(0, path.segments.size()):
 			for child in base.children:
+				if not base.can_execute_or_go_through():
+					return error_handler.throw_permission_error()
 				if child.filename == path.segments[i]:
 					base = child
 					found = true
@@ -322,7 +357,9 @@ func get_parent_element_from(path: PathObject) -> SystemElement:
 	return get_file_element_at(PathObject.new(path.parent) if path.parent != null else PWD)
 
 func copy_element(e: SystemElement) -> SystemElement:
-	return SystemElement.new(e.type, e.filename, e.parent, e.content, e.children)
+	var ref := SystemElement.new(e.type, e.filename, e.parent, e.content, e.children, user_name, group_name)
+	ref.permissions = e.permissions # important to have the same permissions on the copy
+	return ref
 
 func copy_children_of(e: SystemElement) -> Array:
 	var list := []
@@ -339,7 +376,7 @@ func copy_children_of(e: SystemElement) -> Array:
 # and the new files will be appened to the destination.
 # Returns true for success, false for failure
 func merge(origin: SystemElement, destination: SystemElement) -> bool:
-	if not destination.is_folder():
+	if destination == null or not destination.is_folder():
 		return false
 	var found_same_filename_inside_folder := false
 	if origin.is_file():
@@ -371,6 +408,8 @@ func move(origin: SystemElement, destination: PathObject) -> bool:
 	var destination_dir: SystemElement = get_file_element_at(destination) if destination.is_leading_to_folder() else get_parent_element_from(destination)
 	if destination_dir == null:
 		return false
+	if not destination_dir.can_execute_or_go_through() or not destination_dir.can_write() or not origin.can_write():
+		return error_handler.throw_permission_error(false)
 	var copy = copy_element(origin)
 	copy.rename(new_name)
 	copy.move_inside_of(destination_dir.absolute_path)
@@ -419,15 +458,17 @@ func build_manual_page_using(manual: Dictionary) -> String:
 # if the file doesn't exist on the standard output,
 # then we must create it.
 func get_file_or_make_it(path: PathObject):
-	if not path.is_valid or path.is_leading_to_folder():
+	if path.is_leading_to_folder():
 		return null
 	var element: SystemElement = get_file_element_at(path)
+	if error_handler.has_error:
+		return null
 	if not element == null:
 		return element
 	var parent_element = get_parent_element_from(path)
 	if parent_element == null or not parent_element.is_folder():
 		return null
-	var new_file := SystemElement.new(0, path.file_name, parent_element.absolute_path.path)
+	var new_file := SystemElement.new(0, path.file_name, parent_element.absolute_path.path, "", [], user_name, group_name)
 	parent_element.append(new_file)
 	return new_file
 
@@ -444,19 +485,42 @@ func interpret_redirections(redirections: Array) -> Array:
 		else:
 			result[redirections[i].port] = redirections[i]
 	if result[0] != null:
+		var target: SystemElement = get_file_element_at(PathObject.new(result[0].target))
+		if error_handler.has_error:
+			target = null
+		elif target == null:
+			error_handler.throw_error("Le fichier n'existe pas.")
+		elif target.is_folder():
+			error_handler.throw_error("La cible de l'entrée standard est un dossier.")
+		elif not target.can_read():
+			error_handler.throw_permission_error()
 		result[0] = {
 			"type": result[0].type,
-			"target": get_file_element_at(PathObject.new(result[0].target)) # if it doesn't exist, we ignore
+			"target": target
 		}
 	for i in range(1, result.size()):
 		if result[i] != null:
+			var path := PathObject.new(result[i].target)
+			var target = null
+			if not path.is_valid:
+				error_handler.throw_error("Le chemin de la redirection " + str(i) + " n'est pas valide.")
+			else:
+				target = get_file_or_make_it(path)
+				if error_handler.has_error:
+					target = null
+				elif target == null:
+					error_handler.throw_error("Redirection " + str(i) + " invalide.")
+				elif target.is_folder():
+					error_handler.throw_error("La cible de la redirection " + str(i) +" est un dossier.")
+				elif not target.can_write():
+					error_handler.throw_permission_error()
 			result[i] = {
 				"type": result[i].type,
-				"target": get_file_or_make_it(PathObject.new(result[i].target))
+				"target": target
 			}
 	return result
 
-func man(options: Array, redirections: Array, _standard_input: String) -> Dictionary:
+func man(options: Array, _standard_input: String) -> Dictionary:
 	if options.size() == 0:
 		return {
 			"error": "quelle page du manuel désirez-vous ?"
@@ -475,7 +539,7 @@ func man(options: Array, redirections: Array, _standard_input: String) -> Dictio
 	}
 
 # feature that should be overwritten to match the requirements of the game
-func help(options: Array, redirections: Array, _standard_input: String) -> Dictionary:
+func help(options: Array, _standard_input: String) -> Dictionary:
 	if options.size() > 0:
 		return {
 			"error": "aucun argument n'est attendu"
@@ -485,7 +549,7 @@ func help(options: Array, redirections: Array, _standard_input: String) -> Dicti
 		"error": null
 	}
 
-func echo(options: Array, redirections: Array, _standard_input: String) -> Dictionary:
+func echo(options: Array, _standard_input: String) -> Dictionary:
 	var to_display := ""
 	var line_break := true
 	for option in options:
@@ -504,7 +568,7 @@ func echo(options: Array, redirections: Array, _standard_input: String) -> Dicti
 		"error": null
 	}
 
-func grep(options: Array, redirections: Array, standard_input: String) -> Dictionary:
+func grep(options: Array, standard_input: String) -> Dictionary:
 	if standard_input.empty():
 		return {
 			"error": "Une entrée standard doit être spécifiée"
@@ -529,9 +593,9 @@ func grep(options: Array, redirections: Array, standard_input: String) -> Dictio
 	}
 
 # `tr` already exists and cannot be redefined to match the required signature,
-# hence the "_" at the end of the functions' name, which will be ignored by the interpreter.
+# hence the "_" at the end of the functions' name.
 # Such exception must be handled manually.
-func tr_(options: Array, redirections: Array, standard_input: String) -> Dictionary:
+func tr_(options: Array, standard_input: String) -> Dictionary:
 	if standard_input.empty() or options.size() != 2:
 		return {
 			"error": "deux pattern doivent être spécifiés"
@@ -561,108 +625,120 @@ func tr_(options: Array, redirections: Array, standard_input: String) -> Diction
 		"error": null
 	}
 
-func cat(options: Array, redirections: Array, _standard_input: String) -> Dictionary:
+func cat(options: Array, standard_input: String) -> Dictionary:
 	if options.size() > 1:
 		return { "error": "trop d'arguments" }
 	if options.size() == 0:
-		return { "error": "un chemin doit être spécifié" }
+		# something weird about the "cat" command...
+		# if no file is given as argument,
+		# but a file is given in the standard input,
+		# then the standard input becomes the output
+		return {
+			"output": standard_input,
+			"error": null
+		}
 	var path = PathObject.new(options[0].value)
 	if not path.is_valid:
-		return { "error": "le chemin n'est pas valide" }
+		return {
+			"error": "le chemin n'est pas valide"
+		}
 	var element = get_file_element_at(path)
 	if element == null:
-		return { "error": "la destination n'existe pas" }
+		return {
+			"error": _display_error_or("la destination n'existe pas")
+		}
 	if not element.is_file():
-		return { "error": "la destination doit être un fichier !" }
+		return {
+			"error": "la destination doit être un fichier !"
+		}
+	if not element.can_read():
+		return {
+			"error": "Permission refusée"
+		}
 	var output = (element.content if not element.content.empty() else "Le fichier est vide.") + "\n"
 	return {
 		"output": output,
 		"error": null
 	}
 
-func ls(options: Array, redirections: Array, _standard_input: String) -> Dictionary:
+func ls(options: Array, _standard_input: String) -> Dictionary:
 	var target = null
 	var hide_secret_elements = true
-	if options.size() == 0:
-		target = get_pwd_file_element()
-	elif options.size() == 1:
-		if options[0].is_flag():
-			if options[0].value == "a":
+	var show_stats = false
+	for option in options:
+		if option.is_word():
+			var path := PathObject.new(option.value)
+			if not path.is_valid:
+				return {
+					"error": "chemin invalide."
+				}
+			target = get_file_element_at(path)
+			if target == null:
+				return {
+					"error": _display_error_or("la destination n'existe pas")
+				}
+			if target.is_folder() and (not target.can_execute_or_go_through() or not target.can_read()):
+				return {
+					"error": "Permission refusée"
+				}
+			break
+		elif option.is_flag():
+			if option.value == "a":
 				hide_secret_elements = false
+			elif option.value == "l":
+				show_stats = true
 			else:
 				return {
-					"error": "l'option '" + options[0].value + "' n'existe pas.",
+					"error": "l'option \"" + option.value + "\" est inconnue."
 				}
-			target = get_pwd_file_element()
 		else:
-			if options[0].is_word():
-				var p := PathObject.new(options[0].value)
-				if not p.is_valid:
-					return {
-						"error": "le chemin n'est pas valide."
-					}
-				target = get_file_element_at(p)
-			else:
-				return {
-					"error": "valeur inattendue '" + options[0].value + "'."
-				}
-	elif options.size() == 2:
-		if not options[0].is_flag():
 			return {
-				"error": "valeur inattendue '" + options[0].value + "'. Peut-être vouliez-vous mettre une option ?"
+				"error": "une option ou un chemin est attendu"
 			}
-		else:
-			if options[0].value == "a":
-				hide_secret_elements = false
-			else:
-				return {
-					"error": "l'option '" + options[0].value + "' n'existe pas."
-				}
-			if not options[1].is_word():
-				return {
-					"error": "valeur inattendue '" + options[1].value + "'."
-				}
-			var p := PathObject.new(options[1].value)
-			if not p.is_valid:
-				return {
-					"error": "le chemin n'est pas valide."
-				}
-			target = get_file_element_at(p)
 	if target == null:
-		return {
-			"error": "la destination n'existe pas."
-		}
-	if target.is_file():
-		return {
-			"error": "la destination doit être un dossier."
-		}
-	var output = ""
-	for child in target.children:
-		if hide_secret_elements and child.is_hidden():
-			continue
+		target = get_pwd_file_element()
+	var output := ""
+	if show_stats:
+		if target.is_folder():
+			for child in target.children:
+				if hide_secret_elements and child.is_hidden():
+					continue
+				else:
+					output += child.info_long_format()
 		else:
-			if child.is_folder():
-				output += "[color=green]" + child.filename + "[/color]\n"
+			output += target.info_long_format()
+	else:
+		if target.is_file():
+			return {
+				"output": target.filename,
+				"error": null
+			}
+		for child in target.children:
+			if hide_secret_elements and child.is_hidden():
+				continue
 			else:
-				output += child.filename + "\n"
+				if child.is_folder():
+					output += "[color=green]" + child.filename + "[/color]\n"
+				else:
+					output += child.filename + "\n"
 	return {
 		"output": output,
 		"error": null
 	}
 
-func clear(_options: Array, redirections: Array, _standard_input: String) -> Dictionary:
+func clear(_options: Array, _standard_input: String) -> Dictionary:
 	return {
 		"output": "",
 		"error": null
 	}
 
-func tree(_options: Array, redirections: Array, _standard_input: String) -> Dictionary:
+func tree(_options: Array, _standard_input: String) -> Dictionary:
 	return {
 		"output": get_pwd_file_element().to_string(), # this is using the default _to_string methods recursively on the children of the root
 		"error": null
 	}
 
-func pwd(options: Array, redirections: Array, _standard_input: String) -> Dictionary:
+func pwd(options: Array, _standard_input: String) -> Dictionary:
 	if options.size() != 0:
 		return {
 			"error": "aucun argument n'est attendu."
@@ -672,7 +748,7 @@ func pwd(options: Array, redirections: Array, _standard_input: String) -> Dictio
 		"error": null
 	}
 
-func cd(options: Array, redirections: Array, _standard_input: String) -> Dictionary:
+func cd(options: Array, _standard_input: String) -> Dictionary:
 	if options.size() == 0:
 		PWD = PathObject.new("/")
 		return { "output": "", "error": null }
@@ -692,11 +768,15 @@ func cd(options: Array, redirections: Array, _standard_input: String) -> Diction
 	var element = get_file_element_at(path)
 	if element == null:
 		return {
-			"error": "la destination n'existe pas."
+			"error": _display_error_or("la destination n'existe pas.")
 		}
 	if element.is_file():
 		return {
 			"error": "la destination doit être un dossier."
+		}
+	if not element.can_execute_or_go_through():
+		return {
+			"error": "Permission refusée"
 		}
 	PWD = element.absolute_path
 	return {
@@ -704,7 +784,7 @@ func cd(options: Array, redirections: Array, _standard_input: String) -> Diction
 		"error": null
 	}
 
-func touch(options: Array, redirections: Array, _standard_input: String) -> Dictionary:
+func touch(options: Array, _standard_input: String) -> Dictionary:
 	if options.size() == 0 or not options[0].is_word():
 		return {
 			"error": "un chemin est attendu en argument"
@@ -719,6 +799,10 @@ func touch(options: Array, redirections: Array, _standard_input: String) -> Dict
 			"error": "le chemin n'est pas valide"
 		}
 	var element = get_file_element_at(path)
+	if error_handler.has_error:
+		return {
+			"error": error_handler.clear()
+		}
 	if element != null: # if the file already exists, we ignore
 		return {
 			"output": "",
@@ -733,15 +817,19 @@ func touch(options: Array, redirections: Array, _standard_input: String) -> Dict
 		return {
 			"error": "le dossier du fichier à créer n'existe pas"
 		}
+	if not parent.can_write():
+		return {
+			"error": "permission refusée"
+		}
 	parent.append(
-		SystemElement.new(0, path.file_name, parent.absolute_path.path, "")
+		SystemElement.new(0, path.file_name, parent.absolute_path.path, "", [], user_name, group_name)
 	)
 	return {
 		"output": "",
 		"error": null
 	}
 
-func mkdir(options: Array, redirections: Array, _standard_input: String) -> Dictionary:
+func mkdir(options: Array, _standard_input: String) -> Dictionary:
 	if options.size() == 0 or not options[0].is_word():
 		return {
 			"error": "un chemin valide est attendu"
@@ -756,24 +844,32 @@ func mkdir(options: Array, redirections: Array, _standard_input: String) -> Dict
 			"error": "le chemin n'est pas valide"
 		}
 	var element = get_file_element_at(path)
+	if error_handler.has_error:
+		return {
+			"error": error_handler.clear()
+		}
 	if element != null:
 		return {
 			"error": "la destination existe déjà"
 		}
-	var parent = get_file_element_at(PathObject.new(path.parent) if path.parent != null else PWD)
+	var parent = get_parent_element_from(path)
 	if parent == null or not parent.is_folder():
 		return {
 			"error": "Le dossier parent de la destination n'existe pas"
 		}
+	if not parent.can_write():
+		return {
+			"error": "permission refusée"
+		}
 	parent.append(
-		SystemElement.new(1, path.segments[-1], parent.absolute_path.path, "")
+		SystemElement.new(1, path.segments[-1], parent.absolute_path.path, "", [], user_name, group_name)
 	)
 	return {
 		"output": "",
 		"error": null
 	}
 
-func rm(options: Array, redirections: Array, _standard_input: String) -> Dictionary:
+func rm(options: Array, _standard_input: String) -> Dictionary:
 	if options.size() == 0:
 		return {
 			"error": "une destination est attendue"
@@ -805,7 +901,7 @@ func rm(options: Array, redirections: Array, _standard_input: String) -> Diction
 	var element: SystemElement = get_file_element_at(path)
 	if element == null:
 		return {
-			"error": "la destination n'existe pas"
+			"error": _display_error_or("la destination n'existe pas")
 		}
 	if element.absolute_path.equals("/"):
 		return {
@@ -815,12 +911,16 @@ func rm(options: Array, redirections: Array, _standard_input: String) -> Diction
 		return {
 			"error": "tu ne peux pas supprimer le dossier dans lequel tu te situes"
 		}
+	var parent = get_parent_element_from(path)
+	if parent == null:
+		return {
+			"error": "le dossier parent de la cible n'existe pas"
+		}
+	if not parent.can_write() or not element.can_write():
+		return {
+			"error": "permission refusée"
+		}
 	if element.is_file():
-		var parent = get_parent_element_from(path)
-		if parent == null:
-			return {
-				"error": "le dossier parent de la cible n'existe pas"
-			}
 		parent.children.erase(element)
 	else:
 		if not directory:
@@ -832,10 +932,9 @@ func rm(options: Array, redirections: Array, _standard_input: String) -> Diction
 				"error": "la cible n'est pas vide"
 			}
 		else:
-			var parent = get_parent_element_from(path)
-			if parent == null:
+			if not element.can_execute_or_go_through():
 				return {
-					"error": "le dossier parent de la cible n'existe pas"
+					"error": "permission refusée"
 				}
 			parent.children.erase(element)
 	return {
@@ -843,7 +942,7 @@ func rm(options: Array, redirections: Array, _standard_input: String) -> Diction
 		"error": null
 	}
 
-func cp(options: Array, redirections: Array, _standard_input: String) -> Dictionary:
+func cp(options: Array, _standard_input: String) -> Dictionary:
 	if options.size() != 2:
 		return {
 			"error": "deux chemins sont attendus"
@@ -864,6 +963,10 @@ func cp(options: Array, redirections: Array, _standard_input: String) -> Diction
 		}
 	var cp1 = get_file_element_at(cp1_path) as SystemElement
 	var cp2 = get_file_element_at(cp2_path) as SystemElement
+	if error_handler.has_error:
+		return {
+			"error": error_handler.clear()
+		}
 	if cp1 == null:
 		return {
 			"error": "le fichier d'origine doit exister"
@@ -897,6 +1000,10 @@ func cp(options: Array, redirections: Array, _standard_input: String) -> Diction
 			if cp2.is_file():
 				cp2.content = cp1.content
 			else:
+				if not cp2.can_execute_or_go_through() or not cp2.can_write():
+					return {
+						"error": "Permission refusée"
+					}
 				merge(cp1, cp2)
 		else:
 			if cp2_path.is_leading_to_folder():
@@ -912,14 +1019,22 @@ func cp(options: Array, redirections: Array, _standard_input: String) -> Diction
 				0,
 				cp2_path.file_name,
 				parent_element.absolute_path.path,
-				cp1.content
+				cp1.content,
+				[],
+				user_name,
+				group_name
 			)
+			new_file.permissions = cp1.permissions
 			parent_element.append(new_file)
 	else:
 		if cp2 != null:
 			if not cp2.is_folder():
 				return {
-					"error": "si l'origine est un dossier alors laa cible doit être un dossier aussi"
+					"error": "si l'origine est un dossier alors la cible doit être un dossier aussi"
+				}
+			if not cp2.can_execute_or_go_through() or not cp2.can_write():
+				return {
+					"error": "Permission refusée"
 				}
 			merge(cp1, cp2)
 		else:
@@ -929,14 +1044,15 @@ func cp(options: Array, redirections: Array, _standard_input: String) -> Diction
 			var children := copy_children_of(cp1)
 			for child in children:
 				child.move_inside_of(parent_element.absolute_path.path + "/" + cp2_path.file_name)
-			var target_element := SystemElement.new(1, cp2_path.file_name, parent_element.absolute_path.path, "", children)
+			var target_element := SystemElement.new(1, cp2_path.file_name, parent_element.absolute_path.path, "", children, user_name, group_name)
+			target_element.permissions = cp1.permissions
 			parent_element.append(target_element)
 	return {
 		"output": "",
 		"error": null
 	}
 
-func mv(options: Array, redirections: Array, _standard_input: String) -> Dictionary:
+func mv(options: Array, _standard_input: String) -> Dictionary:
 	if options.size() != 2 or not options[0].is_word() or not options[1].is_word():
 		return {
 			"error": "deux chemins valides sont attendus"
@@ -953,6 +1069,10 @@ func mv(options: Array, redirections: Array, _standard_input: String) -> Diction
 		}
 	var mv1: SystemElement = get_file_element_at(mv1_path)
 	var mv2: SystemElement = get_file_element_at(mv2_path)
+	if error_handler.has_error:
+		return {
+			"error": error_handler.clear()
+		}
 	if mv1 == null:
 		return {
 			"error": "l'origine n'existe pas"
@@ -979,21 +1099,30 @@ func mv(options: Array, redirections: Array, _standard_input: String) -> Diction
 		if mv2 != null:
 			var parent_mv1: SystemElement = get_parent_element_from(mv1_path)
 			if mv2.is_file():
+				if not mv2.can_write():
+					return {
+						"error": "permission refusée"
+					}
 				mv2.content = mv1.content
 			else:
-				if merge(mv1, mv2) == false:
+				if not mv2.can_execute_or_go_through() or not mv2.can_write():
 					return {
-						"error": "la destination n'est pas un dossier"
+						"error": "permission refusée"
 					}
+				merge(mv1, mv2)
 			parent_mv1.children.erase(mv1)
 		else:
 			if move(mv1, mv2_path) == false:
 				return {
-					"error": "la destination n'existe pas"
+					"error": _display_error_or("la destination n'existe pas")
 				}
 	else:
 		if mv2 != null:
 			if mv2.is_folder():
+				if not mv2.can_execute_or_go_through() or not mv2.can_write():
+					return {
+						"error": "permission refusée"
+					}
 				var parent_mv1: SystemElement = get_parent_element_from(mv1_path)
 				mv2.append(copy_element(mv1).move_inside_of(mv2.absolute_path))
 				parent_mv1.children.erase(mv1)
@@ -1004,8 +1133,46 @@ func mv(options: Array, redirections: Array, _standard_input: String) -> Diction
 		else:
 			if move(mv1, mv2_path) == false:
 				return {
-					"error": "la destination n'existe pas"
+					"error": _display_error_or("la destination n'existe pas")
 				}
+	return {
+		"output": "",
+		"error": null
+	}
+
+func chmod(options: Array, _standard_input: String) -> Dictionary:
+	if options.size() != 2 or not options[1].is_word():
+		return {
+			"error": "les nouvelles permissions ainsi que la destination sont attendues, rien d'autre."
+		}
+	var permissions: String = ("-" + options[0].value) if options[0].is_flag() else options[0].value
+	var path := PathObject.new(options[1].value)
+	if not path.is_valid:
+		return {
+			"error": "la destination n'est pas un chemin valide"
+		}
+	var target: SystemElement = get_file_element_at(path)
+	if target == null:
+		return {
+			"error": _display_error_or("la destination n'existe pas")
+		}
+	if target.absolute_path.equals("/"):
+		return {
+			"error": "évite de changer les droits de la racine frérot !"
+		}
+	# If the permissions are not valid for the octal format,
+	# then maybe it is a valid format for a specific permission (u+x for example)
+	# which is something that the method `set_specific_permission` checks for us.
+	if not SystemElement.are_permissions_valid(permissions):
+		if not target.set_specific_permission(permissions):
+			return {
+				"error": "permissions invalides"
+			}
+	else:
+		if not target.set_permissions(permissions):
+			return {
+				"error": "permissions invalides"
+			}
 	return {
 		"output": "",
 		"error": null

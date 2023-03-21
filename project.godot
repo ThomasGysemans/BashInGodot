@@ -89,6 +89,11 @@ _global_script_classes=[ {
 "language": "GDScript",
 "path": "res://addons/gdUnit3/src/matchers/EqualsArgumentMatcher.gd"
 }, {
+"base": "Object",
+"class": "ErrorHandler",
+"language": "GDScript",
+"path": "res://scripts/ErrorHandler.gd"
+}, {
 "base": "Resource",
 "class": "Fuzzer",
 "language": "GDScript",
@@ -751,6 +756,7 @@ _global_script_class_icons={
 "Comparator": "",
 "DefaultValueProvider": "",
 "EqualsArgumentMatcher": "",
+"ErrorHandler": "",
 "Fuzzer": "",
 "FuzzerTool": "",
 "Fuzzers": "",

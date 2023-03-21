@@ -51,6 +51,10 @@ func _read(input: String) -> Array:
 					result.append(redirection.token)
 				pos = redirection.pos
 		elif input[pos] == ">" or input[pos] == "<":
+			if input[pos] == ">":
+				result.append(BashToken.new(Tokens.DESCRIPTOR, 1)) # default redirection for ">" or ">>"
+			else:
+				result.append(BashToken.new(Tokens.DESCRIPTOR, 0)) # default redirection for "<" or "<<"
 			var redirection := _read_redirection(input, pos, length)
 			if redirection.error != null:
 				error = redirection.error

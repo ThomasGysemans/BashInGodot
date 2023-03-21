@@ -3,6 +3,9 @@ extends Panel
 
 const INIT_TEXT = "Terminal M100 1.0.\nLe terminal fait maison [b]simplifié[/b].\nEntrez \"help\" si vous avez besoin d'aide.\n-----------------\n"
 
+export(String) var user_name
+export(String) var group_name
+
 onready var interface: RichTextLabel = $Interface; # the terminal
 onready var prompt: LineEdit = $Prompt; # the input
 
@@ -11,6 +14,17 @@ var history := [] # array of strings containing all previous entered commands
 var history_index := 0 # the position in the history. Except if travelling through the history it will have the size of history as value
 
 func _ready():
+	if user_name != null:
+		terminal.user_name = user_name
+	if group_name != null:
+		terminal.group_name = group_name
+	terminal.set_root([
+		SystemElement.new(0, "file.txt", "/", "Ceci est le contenu du fichier.", [], user_name, group_name),
+		SystemElement.new(1, "folder", "/", "", [
+			SystemElement.new(0, "answer_to_life.txt", "/folder", "42", [], user_name, group_name),
+			SystemElement.new(0, ".secret", "/folder", "this is a secret", [], user_name, group_name)
+		], user_name, group_name)
+	])
 	interface.append_bbcode(INIT_TEXT)
 
 # TODO: ajout du Token group pour pouvoir faire mkdir baste/{toto,tata}
@@ -43,6 +57,8 @@ func _process(_delta):
 			else:
 				word_to_complete = full_path
 			var element = terminal.get_parent_element_from(PathObject.new(full_path)) if not word_to_complete.empty() else terminal.get_file_element_at(PathObject.new(full_path))
+			if not element.can_read():
+				return # cannot autocomplete with the files contained in a folder we can't read from
 			for child in element.children:
 				if child.filename.begins_with(word_to_complete):
 					possibilites.append(child.filename)

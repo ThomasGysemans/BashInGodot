@@ -555,10 +555,12 @@ func test_echo() -> void:
 	assert_str(_command("echo", "-y").output).is_equal("-y\n")
 
 func test_grep() -> void:
-	assert_str(_command("grep", "y", "yoyo").output).is_equal("[color=blue]y[/color]o[color=blue]y[/color]o")
+	assert_str(_command("grep", "y", "yoyo").output).is_equal("[color=blue]y[/color]o[color=blue]y[/color]o\n")
 	assert_str(_command("grep", "y", "toto").output).is_equal("")
 	assert_str(_command("grep", "", "yoyo").error).is_not_null()
 	assert_str(_command("grep", "").error).is_not_null()
+	assert_str(_command("grep", "-c y", "yoyo").output).is_equal("2")
+	assert_int(_command("grep", "y", "hey\nyo").output.count("\n") ).is_equal(2)
 
 func test_tr() -> void:
 	assert_str(_command("tr", "").error).is_not_null()

@@ -44,7 +44,7 @@ var COMMANDS := {
 		"reference": funcref(self, "grep"),
 		"manual": {
 			"name": "grep - cherche un pattern dans l'entrée standard.",
-			"synopsis": ["[b]grep[/b] [u]pattern[/u]"],
+			"synopsis": ["[b]grep[/b] [[b]-c[/b] [u]nombre[/u]] [u]pattern[/u]"],
 			"description": "Cherche dans l'entrée standard les lignes qui correspondent au pattern donné. Si le pattern n'y est pas trouvé, la ligne est ignorée. S'il est trouvé, elle est affichée et ce qui correspond au pattern est mis en évidence.",
 			"options": [],
 			"examples": [
@@ -573,20 +573,47 @@ func grep(options: Array, standard_input: String) -> Dictionary:
 		return {
 			"error": "Une entrée standard doit être spécifiée"
 		}
-	if options.size() == 0:
+	var pattern = null
+	var show_count := false
+	var i := 0
+	while i < options.size():
+		if pattern != null:
+			return {
+				"error": "erreur de syntaxe, censé être : " + COMMANDS.grep.manual.synopsis
+			}
+		if options[i].is_word():
+			pattern = options[i].value
+		elif options[i].is_flag():
+			if options[i].value == "c":
+				show_count = true
+			else:
+				return {
+					"error": "l'option '" + options[i].value + "' est inconnue."
+				}
+		else:
+			return {
+				"error": "token inattendu"
+			}
+		i += 1
+	if pattern == null:
 		return {
 			"error": "un pattern doit être spécifié."
 		}
-	if options.size() > 1:
-		return {
-			"error": "arguments en trop"
-		}
 	var regex := RegEx.new()
-	regex.compile(options[0].value)
-	var search := regex.search(standard_input)
+	regex.compile(pattern)
+	var lines := standard_input.split("\n", false)
 	var output := ""
-	if search != null:
-		output = standard_input.replace(search.get_string(), "[color=blue]" + search.get_string() + "[/color]")
+	if show_count:
+		var total := 0
+		for line in lines:
+			var search := regex.search_all(line)
+			total += search.size()
+		output = str(total)
+	else:
+		for line in lines:
+			var search := regex.search(line)
+			if search != null:
+				output += line.replace(search.get_string(), "[color=blue]" + search.get_string() + "[/color]") + "\n"
 	return {
 		"output": output,
 		"error": null

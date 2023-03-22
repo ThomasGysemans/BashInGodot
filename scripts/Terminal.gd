@@ -2,6 +2,36 @@
 extends Panel
 class_name Terminal
 
+# The signal `interface_changed` can be used to read the standard output of a successful command.
+# It is different from `command_executed` because `command_executed` might be thrown several times in a row.
+# Indeed, several commands can be on the same line separated by pipes.
+# Example:
+# $ echo toto | echo tata
+# `command_executed` will be emitted twice with `output` set to "toto" and then "tata"
+# `interface_changed` will be emitted once with `content` set to "tata" (the last standard output of the row)
+
+# NOTE: all the arguments passed to the signals are passed by REFERENCE.
+# Therefore, any modification of the references will modify the terminal's system tree
+# (unless the element is voluntarily removed by the algorithm which is the case for the `origin` argument of the `file_moved` signal).
+# If a copy needs to be done, then see the following functions:
+# - `copy_element()` (Terminal.gd)
+# - `copy_children_of()` (Terminal.gd)
+# - `move_inside_of()` (SystemElement.gd)
+
+signal command_executed (command, output) # command is a dictionary and output is the content of standard output, the signal will be emitted only if the command didn't throw an error
+signal file_created (file) # file is a SystemElement (file or FOLDER)
+signal file_destroyed (file) # file is a SystemElement (file or FOLDER)
+signal file_read (file) # emitted when the file is being read (via the cat command). The `file` can either be a file or a folder.
+signal permissions_changed (file) # file is a SystemElement (file or FOLDER)
+signal directory_changed (target) # emitted when the `cd` command is used (and didn't throw an error)
+signal error_thrown (command, reason) # emitted when the `command` thrown an error, which text is the `reason`
+signal interface_changed (content) # emitted when something is printed onto the screen. It is not emitted when the interface is cleared.
+signal file_copied (origin, copy) # emitted when the `origin` is being copied. Note that `origin` != `copy` (not the same reference, and the absolute path of the copy, or its content, might be different from the origin's).
+signal file_moved (origin, target) # emitted when the `origin` is being moved elsewhere. The origin is destroyed (but `file_destroyed` is not emitted) and `target` is the new instance of SystemElement.
+signal manual_asked (command_name, output) # emitted when the `man` command is used to open the manual page of a command.
+signal help_asked (output) # emitted when the custom `help` command is used.
+signal interface_cleared
+
 var user_name := "vous"
 var group_name := "votre_groupe"
 var PWD := PathObject.new("/") # the absolute path we are currently on in the system_tree
@@ -285,14 +315,17 @@ func execute(input: String, interface: RichTextLabel = null) -> String:
 					if command_redirections[2].type == Tokens.WRITING_REDIRECTION:
 						command_redirections[2].target.content = ""
 				else:
+					emit_signal("error_thrown", command, result.error)
 					if command_redirections[2].type == Tokens.WRITING_REDIRECTION:
 						command_redirections[2].target.content = "Commande '" + command.name + "' : " + result.error
 					elif command_redirections[2].type == Tokens.APPEND_WRITING_REDIRECTION:
 						command_redirections[2].target.content += "Commande '" + command.name + "' : " + result.error
 					return "" # if there is an error, we have to stop the program anyway
 			if result.error != null:
+				emit_signal("error_thrown", command, result.error)
 				return "Commande '" + command.name + "' : " + result.error
 			else:
+				emit_signal("command_executed", command, result.output)
 				if command_redirections[0] != null:
 					# Even though it doesn't make any sense to try to write something
 					# to the standard input, Bash overwrites the content of the target anyway.
@@ -306,8 +339,10 @@ func execute(input: String, interface: RichTextLabel = null) -> String:
 				else:
 					standard_input = result.output
 				if interface != null and command.name == "clear":
+					emit_signal("interface_cleared")
 					interface.text = ""
 	if interface != null and not standard_input.empty():
+		emit_signal("interface_changed", standard_input)
 		interface.append_bbcode(standard_input)
 	return ""
 
@@ -417,6 +452,7 @@ func move(origin: SystemElement, destination: PathObject) -> bool:
 	copy.move_inside_of(destination_dir.absolute_path)
 	destination_dir.append(copy)
 	origin_parent.children.erase(origin)
+	emit_signal("file_moved", origin, copy)
 	return true
 
 func _cut_paragraph(paragraph: String, line_length: int) -> Array:
@@ -471,6 +507,7 @@ func get_file_or_make_it(path: PathObject):
 	if parent_element == null or not parent_element.is_folder():
 		return null
 	var new_file := SystemElement.new(0, path.file_name, parent_element.absolute_path.path, "", [], user_name, group_name)
+	emit_signal("file_created", new_file)
 	parent_element.append(new_file)
 	return new_file
 
@@ -535,19 +572,23 @@ func man(options: Array, _standard_input: String) -> Dictionary:
 		return {
 			"error": "'" + options[0].value + "' est une commande inconnue"
 		}
+	var page := build_manual_page_using(COMMANDS[options[0].value].manual)
+	emit_signal("manual_asked", options[0].value, page)
 	return {
-		"output": build_manual_page_using(COMMANDS[options[0].value].manual),
+		"output": page,
 		"error": null
 	}
 
-# feature that should be overwritten to match the requirements of the game
+# todo: list the possible commannds and explain `man`
 func help(options: Array, _standard_input: String) -> Dictionary:
 	if options.size() > 0:
 		return {
 			"error": "aucun argument n'est attendu"
 		}
+	var page := build_manual_page_using(COMMANDS["help"].manual)
+	emit_signal("help_asked", page)
 	return {
-		"output": build_manual_page_using(COMMANDS["help"].manual),
+		"output": page,
 		"error": null
 	}
 
@@ -683,6 +724,7 @@ func cat(options: Array, standard_input: String) -> Dictionary:
 			"error": "Permission refusée"
 		}
 	var output = (element.content if not element.content.empty() else "Le fichier est vide.") + "\n"
+	emit_signal("file_read", element)
 	return {
 		"output": output,
 		"error": null
@@ -806,6 +848,7 @@ func cd(options: Array, _standard_input: String) -> Dictionary:
 			"error": "Permission refusée"
 		}
 	PWD = element.absolute_path
+	emit_signal("directory_changed", PWD)
 	return {
 		"output": "",
 		"error": null
@@ -848,9 +891,9 @@ func touch(options: Array, _standard_input: String) -> Dictionary:
 		return {
 			"error": "permission refusée"
 		}
-	parent.append(
-		SystemElement.new(0, path.file_name, parent.absolute_path.path, "", [], user_name, group_name)
-	)
+	var file := SystemElement.new(0, path.file_name, parent.absolute_path.path, "", [], user_name, group_name)
+	emit_signal("file_created", file)
+	parent.append(file)
 	return {
 		"output": "",
 		"error": null
@@ -888,9 +931,9 @@ func mkdir(options: Array, _standard_input: String) -> Dictionary:
 		return {
 			"error": "permission refusée"
 		}
-	parent.append(
-		SystemElement.new(1, path.segments[-1], parent.absolute_path.path, "", [], user_name, group_name)
-	)
+	var folder := SystemElement.new(1, path.segments[-1], parent.absolute_path.path, "", [], user_name, group_name)
+	emit_signal("file_created", folder)
+	parent.append(folder)
 	return {
 		"output": "",
 		"error": null
@@ -964,6 +1007,7 @@ func rm(options: Array, _standard_input: String) -> Dictionary:
 					"error": "permission refusée"
 				}
 			parent.children.erase(element)
+	emit_signal("file_destroyed", element)
 	return {
 		"output": "",
 		"error": null
@@ -1036,12 +1080,14 @@ func cp(options: Array, _standard_input: String) -> Dictionary:
 		if cp2 != null:
 			if cp2.is_file():
 				cp2.content = cp1.content
+				emit_signal("file_copied", cp1, cp2)
 			else:
 				if not cp2.can_execute_or_go_through() or not cp2.can_write():
 					return {
 						"error": "Permission refusée"
 					}
 				merge(cp1, cp2)
+				emit_signal("file_copied", cp1, cp2)
 		else:
 			if cp2_path.is_leading_to_folder():
 				return {
@@ -1063,6 +1109,7 @@ func cp(options: Array, _standard_input: String) -> Dictionary:
 			)
 			new_file.permissions = cp1.permissions
 			parent_element.append(new_file)
+			emit_signal("file_copied", cp1, new_file)
 	else:
 		if cp2 != null:
 			if not cp2.is_folder():
@@ -1083,10 +1130,12 @@ func cp(options: Array, _standard_input: String) -> Dictionary:
 			# otherwise the folder is copied (moved but not deleted)
 			if cp1_path.is_leading_to_folder():
 				merge(cp1, cp2)
+				emit_signal("file_copied", cp1, cp2)
 			else:
 				var copy := copy_element(cp1)
 				copy.move_inside_of(cp2.absolute_path)
 				cp2.append(copy)
+				emit_signal("file_copied", cp1, cp2)
 		else:
 			# the destination doesn't exist,
 			# create a folder and copy the entire content as its children
@@ -1097,6 +1146,7 @@ func cp(options: Array, _standard_input: String) -> Dictionary:
 			var target_element := SystemElement.new(1, cp2_path.file_name, parent_element.absolute_path.path, "", children, user_name, group_name)
 			target_element.permissions = cp1.permissions
 			parent_element.append(target_element)
+			emit_signal("file_copied", cp1, target_element)
 	return {
 		"output": "",
 		"error": null
@@ -1161,6 +1211,7 @@ func mv(options: Array, _standard_input: String) -> Dictionary:
 					}
 				merge(mv1, mv2)
 			parent_mv1.children.erase(mv1)
+			emit_signal("file_moved", mv1, mv2)
 		else:
 			if move(mv1, mv2_path) == false:
 				return {
@@ -1176,6 +1227,7 @@ func mv(options: Array, _standard_input: String) -> Dictionary:
 				var parent_mv1: SystemElement = get_parent_element_from(mv1_path)
 				mv2.append(copy_element(mv1).move_inside_of(mv2.absolute_path))
 				parent_mv1.children.erase(mv1)
+				emit_signal("file_moved", mv1, mv2)
 			else:
 				return {
 					"error": "la destination doit être un dossier"
@@ -1223,6 +1275,7 @@ func chmod(options: Array, _standard_input: String) -> Dictionary:
 			return {
 				"error": "permissions invalides"
 			}
+	emit_signal("permissions_changed", target)
 	return {
 		"output": "",
 		"error": null

@@ -55,7 +55,7 @@ func is_absolute() -> bool:
 func equals(other_path) -> bool:
 	if other_path is String:
 		return self.path == other_path.simplify_path()
-	return self.path ==  other_path.path # otherwise it is considered to be another PathObject
+	return self.path == other_path.path # otherwise it is considered to be another PathObject
 
 func _to_string():
 	return path

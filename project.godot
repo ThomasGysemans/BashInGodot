@@ -27,12 +27,12 @@ _global_script_classes=[ {
 "base": "Object",
 "class": "BashParser",
 "language": "GDScript",
-"path": "res://scripts/BashParser.gd"
+"path": "res://addons/bash_in_godot/scripts/BashParser.gd"
 }, {
 "base": "Object",
 "class": "BashToken",
 "language": "GDScript",
-"path": "res://scripts/BashToken.gd"
+"path": "res://addons/bash_in_godot/scripts/BashToken.gd"
 }, {
 "base": "ValueProvider",
 "class": "CallBackValueProvider",
@@ -92,7 +92,7 @@ _global_script_classes=[ {
 "base": "Object",
 "class": "ErrorHandler",
 "language": "GDScript",
-"path": "res://scripts/ErrorHandler.gd"
+"path": "res://addons/bash_in_godot/scripts/ErrorHandler.gd"
 }, {
 "base": "Resource",
 "class": "Fuzzer",
@@ -622,7 +622,7 @@ _global_script_classes=[ {
 "base": "Object",
 "class": "PathObject",
 "language": "GDScript",
-"path": "res://scripts/Path.gd"
+"path": "res://addons/bash_in_godot/scripts/Path.gd"
 }, {
 "base": "Reference",
 "class": "RPC",
@@ -687,12 +687,17 @@ _global_script_classes=[ {
 "base": "Object",
 "class": "SystemElement",
 "language": "GDScript",
-"path": "res://scripts/SystemElement.gd"
+"path": "res://addons/bash_in_godot/scripts/SystemElement.gd"
 }, {
 "base": "Panel",
 "class": "Terminal",
 "language": "GDScript",
-"path": "res://scripts/Terminal.gd"
+"path": "res://addons/bash_in_godot/scripts/Terminal.gd"
+}, {
+"base": "GdUnitTestSuite",
+"class": "TerminalTest",
+"language": "GDScript",
+"path": "res://test/scripts/TerminalTest.gd"
 }, {
 "base": "Resource",
 "class": "TimeUnit",
@@ -702,7 +707,7 @@ _global_script_classes=[ {
 "base": "Object",
 "class": "Tokens",
 "language": "GDScript",
-"path": "res://scripts/Tokens.gd"
+"path": "res://addons/bash_in_godot/scripts/Tokens.gd"
 }, {
 "base": "Reference",
 "class": "ValueProvider",
@@ -872,6 +877,7 @@ _global_script_class_icons={
 "StringFuzzer": "",
 "SystemElement": "",
 "Terminal": "",
+"TerminalTest": "",
 "TimeUnit": "",
 "Tokens": "",
 "ValueProvider": "",
@@ -885,7 +891,7 @@ _global_script_class_icons={
 [application]
 
 config/name="Terminal"
-run/main_scene="res://Terminal.tscn"
+run/main_scene="res://demo.tscn"
 config/icon="res://icon.png"
 
 [display]

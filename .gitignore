@@ -1,4 +1,4 @@
-addons/
+addons/gdUnit3
 runtest.*
 workspace.code-workspace
 GdUnitRunner.cfg

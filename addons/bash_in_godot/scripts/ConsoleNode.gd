@@ -6,14 +6,18 @@ const INIT_TEXT = "Terminal M100 1.0.\nLe terminal fait maison [b]simplifié[/b]
 export(String) var user_name
 export(String) var group_name
 
-onready var interface: RichTextLabel = $Interface; # the terminal
-onready var prompt: LineEdit = $Prompt; # the input
+onready var interface: RichTextLabel = preload("res://addons/bash_in_godot/scenes/Interface.tscn").instance(); # the terminal
+onready var prompt: LineEdit = preload("res://addons/bash_in_godot/scenes/Prompt.tscn").instance(); # the input
 
 var terminal := Terminal.new()
 var history := [] # array of strings containing all previous entered commands
-var history_index := 0 # the position in the history. Except if travelling through the history it will have the size of history as value
+var history_index := 0 # the position in the history. By default, it will have the size of the history array as value
 
 func _ready():
+	add_child(interface)
+	add_child(prompt)
+	prompt.connect("text_entered", self, "_on_command_entered")
+	theme = preload("res://addons/bash_in_godot/resources/terminal.tres")
 	if user_name != null:
 		terminal.user_name = user_name
 	if group_name != null:
@@ -26,8 +30,6 @@ func _ready():
 		], user_name, group_name)
 	])
 	interface.append_bbcode(INIT_TEXT)
-
-# TODO: ajout du Token group pour pouvoir faire mkdir baste/{toto,tata}
 
 func _process(_delta):
 	if Input.is_action_just_pressed("ui_up") and history_index > 0:
@@ -87,6 +89,8 @@ func _process(_delta):
 				prompt.set_cursor_position(prompt.text.length())
 
 func _on_command_entered(new_text: String):
+	if new_text.strip_edges().empty():
+		return
 	prompt.clear()
 	history.append(new_text)
 	history_index = history.size()

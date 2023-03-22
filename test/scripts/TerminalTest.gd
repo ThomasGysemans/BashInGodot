@@ -61,7 +61,8 @@ func test_bashtoken() -> void:
 
 func test_system_element() -> void:
 	assert_str(SystemElement.new(0, ".gitignore", "/").filename).is_equal(".gitignore")
-	assert_str(SystemElement.new(1, "folder", "/").parent).is_equal("/")
+	assert_str(SystemElement.new(1, "folder", "/").base_dir).is_equal("/")
+	assert_str(SystemElement.new(1, "folder", "/somefolder/subfolder/childfolder").base_dir).is_equal("/somefolder/subfolder/childfolder")
 	assert_str(SystemElement.new(0, "answer_to_life.txt", "/folder", "42").content).is_equal("42")
 	assert_str(SystemElement.new(0, "folder", "/", "yoyo").content).is_equal("yoyo")
 	assert_bool(SystemElement.new(0, "file.txt", "/").is_hidden()).is_false()
@@ -154,6 +155,8 @@ func test_paths() -> void:
 	assert_str(PathObject.new("/").path).is_equal("/")
 	assert_int(PathObject.new("file.txt").type).is_equal(0)
 	assert_array(PathObject.new("parent/child").segments).contains_exactly(["parent", "child"])
+	assert_str(PathObject.new("parent/child").parent).is_equal("parent")
+	assert_str(PathObject.new("parent/child/grandchild/grandgrandchild").parent).is_equal("grandchild")
 	assert_str(PathObject.new("parent/child").file_name).is_equal("child")
 	assert_str(PathObject.new("parent/child/").file_name).is_equal("child")
 	assert_str(PathObject.new("file.txt").file_name).is_equal("file.txt")
@@ -171,6 +174,29 @@ func test_paths() -> void:
 
 func test_paths_move_inside_of() -> void:
 	assert_bool(terminal.get_file_element_at(PathObject.new("file.txt")).move_inside_of(PathObject.new("/folder")).absolute_path.equals("/folder/file.txt")).is_true()
+
+func test_move_inside_of_with_folder() -> void:
+	var folder: SystemElement = terminal.get_file_element_at(PathObject.new("/folder"))
+	var folder2 := SystemElement.new(1, "folder2", "/", "", [], user_name, group_name)
+	var subfolder := SystemElement.new(1, "subfolder", "/folder", "", [
+		SystemElement.new(0, "subfile.txt", "/folder/subfolder", "subfiiile", [], user_name, group_name)
+	], user_name, group_name)
+	folder.append(subfolder)
+	# trying to move folder1 to folder1
+	# the absolute paths of the file "/folder/subfolder/subfile.txt" must become "/folder2/subfolder/subfile.txt"
+	# It must be recursive.
+	folder.move_inside_of("/folder2")
+	assert_str(folder.absolute_path.path).is_equal("/folder2/folder")
+	assert_str(folder.base_dir).is_equal("/folder2")
+	assert_str(folder.children[0].filename).is_equal("answer_to_life.txt")
+	assert_str(folder.children[1].filename).is_equal(".secret")
+	assert_str(folder.children[2].filename).is_equal("subfolder")
+	assert_str(folder.children[0].absolute_path.path).is_equal("/folder2/folder/answer_to_life.txt")
+	assert_str(folder.children[0].base_dir).is_equal("/folder2/folder")
+	assert_str(folder.children[1].absolute_path.path).is_equal("/folder2/folder/.secret")
+	assert_str(folder.children[2].absolute_path.path).is_equal("/folder2/folder/subfolder")
+	assert_str(folder.children[2].children[0].filename).is_equal("subfile.txt")
+	assert_str(folder.children[2].children[0].absolute_path.path).is_equal("/folder2/folder/subfolder/subfile.txt")
 
 func test_simplify_path() -> void:
 	assert_str(PathObject.simplify_path(".")).is_equal(".")
@@ -486,6 +512,7 @@ func test_get_parent_element_from() -> void:
 	assert_object(terminal.get_file_element_at(PathObject.new("/imaginaryfolder/yoyo"))).is_null()
 	assert_object(terminal.get_parent_element_from(PathObject.new("/imaginaryfolder/yoyo"))).is_null()
 	assert_bool(terminal.get_parent_element_from(PathObject.new("/folder/answer_to_life.txt")).equals(terminal.system_tree.children[1]))
+	assert_str(terminal.get_parent_element_from(PathObject.new("/folder/answer_to_life.txt")).base_dir).is_equal("/")
 
 func test_copy_element() -> void:
 	_set_permissions_of("/file.txt", "244")
@@ -781,11 +808,23 @@ func test_cp() -> void:
 	# 5. copy a folder to an existing folder
 	terminal.get_file_element_at(PathObject.new("/folder/answer_to_life.txt")).content = "43"
 	var previous_size := terminal.get_file_element_at(PathObject.new("/newfolder")).children.size() as int
-	assert_str(_command("cp", "folder newfolder").error).is_null()
-	assert_int(terminal.get_file_element_at(PathObject.new("/newfolder")).children.size()).is_equal(previous_size)
-	assert_str(terminal.get_file_element_at(PathObject.new("/newfolder/answer_to_life.txt")).content).is_equal("43")
-	assert_str(terminal.get_file_element_at(PathObject.new("/newfolder/.secret")).content).is_equal("this is a secret")
-	assert_bool(terminal.get_file_element_at(PathObject.new("/folder/answer_to_life.txt")).equals(terminal.get_file_element_at(PathObject.new("/newfolder/answer_to_life.txt")))).is_false()
+	assert_str(_command("cp", "folder newfolder").error).is_not_null()
+	assert_str(_command("cp", "-R folder newfolder").error).is_null()
+	assert_int(terminal.get_file_element_at(PathObject.new("/newfolder")).children.size()).is_equal(previous_size + 1)
+	assert_object(terminal.get_file_element_at(PathObject.new("/newfolder/folder"))).is_not_null()
+	assert_object(terminal.get_file_element_at(PathObject.new("/newfolder/folder/answer_to_life.txt"))).is_not_null()
+	assert_str(terminal.get_file_element_at(PathObject.new("/newfolder/answer_to_life.txt")).content).is_not_equal("43")
+	assert_str(terminal.get_file_element_at(PathObject.new("/newfolder/folder/answer_to_life.txt")).base_dir).is_equal("/newfolder/folder")
+	assert_str(terminal.get_file_element_at(PathObject.new("/newfolder/folder/answer_to_life.txt")).absolute_path.path).is_equal("/newfolder/folder/answer_to_life.txt")
+	# 6. copy the contents of a folder to an existing folder
+	var emptyfolder := SystemElement.new(1, "emptyfolder", "/emptyfolder", "", [], user_name, group_name)
+	terminal.system_tree.append(emptyfolder)
+	assert_str(_command("cp", "-R folder/ emptyfolder").error).is_null()
+	assert_int(terminal.get_file_element_at(PathObject.new("/emptyfolder")).children.size()).is_equal(terminal.get_file_element_at(PathObject.new("/folder")).children.size())
+	assert_str(terminal.get_file_element_at(PathObject.new("/emptyfolder/answer_to_life.txt")).content).is_equal("43")
+	assert_object(terminal.get_file_element_at(PathObject.new("/emptyfolder/file.txt"))).is_not_null()
+	assert_object(terminal.get_file_element_at(PathObject.new("/emptyfolder/.secret"))).is_not_null()
+	assert_bool(terminal.get_file_element_at(PathObject.new("/folder/answer_to_life.txt")).equals(terminal.get_file_element_at(PathObject.new("/emptyfolder/answer_to_life.txt")))).is_false()
 
 func test_mv() -> void:
 	assert_str(_command("mv", "").error).is_not_null()

@@ -12,7 +12,7 @@ const R = 4
 
 var type: int # either 0 for file or 1 for folder
 var filename: String # the name of the file
-var parent: String # the parent absolute path. For root it would be an empty string ("")
+var base_dir: String # the parent absolute path. For root it would be an empty string ("")
 var content: String # only if it's a file, otherwise empty string ("")
 var children := [] # an array of SystemElement. Typed arrays will only be possible in Godot v4
 var absolute_path = null # computed and immutable value
@@ -43,10 +43,10 @@ static func are_permissions_valid(p: String) -> bool:
 func _init(t: int, name: String, p, c = "", ch = [], creator: String = "", group: String = ""):
 	type = t
 	filename = name
-	parent = p
+	base_dir = p
 	content = c
 	children = ch
-	absolute_path = PathObject.new(parent + "/" + filename) if not parent.empty() else PathObject.new("/")
+	absolute_path = PathObject.new(base_dir + "/" + filename) if not base_dir.empty() else PathObject.new("/")
 	creator_name = creator
 	group_name = group
 	if is_folder():
@@ -64,10 +64,10 @@ func append(element: SystemElement):
 	children.append(element)
 
 func count_depth() -> int:
-	if parent == "/":
+	if base_dir == "/":
 		return 1
 	else:
-		return parent.count("/") + 1
+		return base_dir.count("/") + 1
 
 func is_file():
 	return type == 0
@@ -81,11 +81,29 @@ func is_hidden():
 func rename(new_name: String):
 	filename = new_name
 
+# When we copy/move of a file to new location,
+# the absolute path of the object must be changed,
+# otherwise it would cause very weird behaviours.
+# We also have to change the absolute path, and the base_dir property,
+# of every children the element may contain.
+# `new_absolute_path` is either a String or an instance of PathObject.
+# Be careful with this, as this function can throw an unexpected error if the type is wrong.
+# Returns the instance of the object in case it needs to be chained.
 func move_inside_of(new_absolute_path):
+	var new_path_object: PathObject 
 	if new_absolute_path is String:
-		absolute_path = PathObject.new(new_absolute_path + "/" + filename)
+		self.base_dir = new_absolute_path # we have the absolute path of the folder it must be inside of
+		new_path_object = PathObject.new(new_absolute_path + "/" + filename) # the absolute path is: base_dir/filename
 	else:
-		absolute_path = PathObject.new(new_absolute_path.path + "/" + filename)
+		self.base_dir = new_absolute_path.path # same as above but with the object instead of the String
+		new_path_object = PathObject.new(new_absolute_path.path + "/" + filename)
+	self.absolute_path = new_path_object
+	# The base_dir is the new_absolute_path
+	# The path that the children must have is therefore the base_dir of their parent (this object)
+	# before the parent of the absolute_path they already have.
+	# The filename will be added to their absolute_path afterwards recursively.
+	for child in self.children:
+		child.move_inside_of(self.base_dir + "/" + child.absolute_path.parent)
 	return self
 
 func equals(another: SystemElement):

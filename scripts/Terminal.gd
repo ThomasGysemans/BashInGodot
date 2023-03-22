@@ -357,7 +357,7 @@ func get_parent_element_from(path: PathObject) -> SystemElement:
 	return get_file_element_at(PathObject.new(path.parent) if path.parent != null else PWD)
 
 func copy_element(e: SystemElement) -> SystemElement:
-	var ref := SystemElement.new(e.type, e.filename, e.parent, e.content, e.children, user_name, group_name)
+	var ref := SystemElement.new(e.type, e.filename, e.base_dir, e.content, copy_children_of(e), user_name, group_name)
 	ref.permissions = e.permissions # important to have the same permissions on the copy
 	return ref
 
@@ -400,6 +400,8 @@ func merge(origin: SystemElement, destination: SystemElement) -> bool:
 				found_same_filename_inside_folder = false
 	return true
 
+# Moves an element to a new destination.
+# This function deletes the origin.
 func move(origin: SystemElement, destination: PathObject) -> bool:
 	if not destination.is_valid or origin == null:
 		return false
@@ -575,26 +577,24 @@ func grep(options: Array, standard_input: String) -> Dictionary:
 		}
 	var pattern = null
 	var show_count := false
-	var i := 0
-	while i < options.size():
+	for option in options:
 		if pattern != null:
 			return {
 				"error": "erreur de syntaxe, censé être : " + COMMANDS.grep.manual.synopsis
 			}
-		if options[i].is_word():
-			pattern = options[i].value
-		elif options[i].is_flag():
-			if options[i].value == "c":
+		if option.is_word():
+			pattern = option.value
+		elif option.is_flag():
+			if option.value == "c":
 				show_count = true
 			else:
 				return {
-					"error": "l'option '" + options[i].value + "' est inconnue."
+					"error": "l'option '" + option.value + "' est inconnue."
 				}
 		else:
 			return {
 				"error": "token inattendu"
 			}
-		i += 1
 	if pattern == null:
 		return {
 			"error": "un pattern doit être spécifié."
@@ -970,26 +970,36 @@ func rm(options: Array, _standard_input: String) -> Dictionary:
 	}
 
 func cp(options: Array, _standard_input: String) -> Dictionary:
-	if options.size() != 2:
-		return {
-			"error": "deux chemins sont attendus"
-		}
-	if not options[0].is_word() or not options[1].is_word():
-		return {
-			"error": "il faut deux chemins en argument, l'origine puis la destination"
-		}
-	var cp1_path := PathObject.new(options[0].value)
-	var cp2_path := PathObject.new(options[1].value)
-	if not cp1_path.is_valid:
+	var copy_directory := false
+	var cp1_path = null
+	var cp2_path = null
+	for option in options:
+		if option.is_flag():
+			if option.value == "R":
+				copy_directory = true
+			else:
+				return {
+					"error": "l'option '" + option.value + "' est inconnue"
+				}
+		else:
+			if cp1_path == null:
+				cp1_path = PathObject.new(option.value)
+			elif cp2_path == null:
+				cp2_path = PathObject.new(option.value)
+			else:
+				return {
+					"error": "trop d'arguments"
+				}
+	if cp1_path == null or not cp1_path.is_valid:
 		return {
 			"error": "le premier chemin est invalide."
 		}
-	if not cp2_path.is_valid:
+	if cp2_path == null or not cp2_path.is_valid:
 		return {
 			"error": "le second chemin est invalide."
 		}
-	var cp1 = get_file_element_at(cp1_path) as SystemElement
-	var cp2 = get_file_element_at(cp2_path) as SystemElement
+	var cp1: SystemElement = get_file_element_at(cp1_path)
+	var cp2: SystemElement = get_file_element_at(cp2_path)
 	if error_handler.has_error:
 		return {
 			"error": error_handler.clear()
@@ -1017,9 +1027,9 @@ func cp(options: Array, _standard_input: String) -> Dictionary:
 	# else:
 	#	if cp2 exists:
 	#		if cp2 is not a folder, then throw an error
-	#		merge content of folder 1 into folder 2:
-	#			if two files have the same name, then the content of the file in cp2 will be replaced by the content of the equivalent file
-	#			if folder2 doesn't contain a file of the same name, then create a copy to place inside it
+	#		if -R is not used, then throw an error
+	#		if the folder ends with a "/", then merge the content of the two files
+	#		otherwise copy the folder as a child of the target.
 	#	else:
 	#		create a folder and copy cp1's children
 	if cp1.is_file():
@@ -1059,11 +1069,24 @@ func cp(options: Array, _standard_input: String) -> Dictionary:
 				return {
 					"error": "si l'origine est un dossier alors la cible doit être un dossier aussi"
 				}
+			if not copy_directory:
+				return {
+					"error": cp1.filename + " est un dossier (rien n'a été copié)"
+				}
 			if not cp2.can_execute_or_go_through() or not cp2.can_write():
 				return {
 					"error": "Permission refusée"
 				}
-			merge(cp1, cp2)
+			# when the option -R is given,
+			# if the path is ending with a "/"
+			# then the entire content is copied,
+			# otherwise the folder is copied (moved but not deleted)
+			if cp1_path.is_leading_to_folder():
+				merge(cp1, cp2)
+			else:
+				var copy := copy_element(cp1)
+				copy.move_inside_of(cp2.absolute_path)
+				cp2.append(copy)
 		else:
 			# the destination doesn't exist,
 			# create a folder and copy the entire content as its children

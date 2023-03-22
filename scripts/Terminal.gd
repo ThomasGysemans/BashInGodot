@@ -19,15 +19,15 @@ class_name Terminal
 # - `move_inside_of()` (SystemElement.gd)
 
 signal command_executed (command, output) # command is a dictionary and output is the content of standard output, the signal will be emitted only if the command didn't throw an error
+signal error_thrown (command, reason) # emitted when the `command` thrown an error, which text is the `reason`
+signal permissions_changed (file) # file is a SystemElement (file or FOLDER)
 signal file_created (file) # file is a SystemElement (file or FOLDER)
 signal file_destroyed (file) # file is a SystemElement (file or FOLDER)
 signal file_read (file) # emitted when the file is being read (via the cat command). The `file` can either be a file or a folder.
-signal permissions_changed (file) # file is a SystemElement (file or FOLDER)
-signal directory_changed (target) # emitted when the `cd` command is used (and didn't throw an error)
-signal error_thrown (command, reason) # emitted when the `command` thrown an error, which text is the `reason`
-signal interface_changed (content) # emitted when something is printed onto the screen. It is not emitted when the interface is cleared.
 signal file_copied (origin, copy) # emitted when the `origin` is being copied. Note that `origin` != `copy` (not the same reference, and the absolute path of the copy, or its content, might be different from the origin's).
 signal file_moved (origin, target) # emitted when the `origin` is being moved elsewhere. The origin is destroyed (but `file_destroyed` is not emitted) and `target` is the new instance of SystemElement.
+signal directory_changed (target) # emitted when the `cd` command is used (and didn't throw an error)
+signal interface_changed (content) # emitted when something is printed onto the screen. It is not emitted when the interface is cleared.
 signal manual_asked (command_name, output) # emitted when the `man` command is used to open the manual page of a command.
 signal help_asked (output) # emitted when the custom `help` command is used.
 signal interface_cleared

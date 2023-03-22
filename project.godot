@@ -694,11 +694,6 @@ _global_script_classes=[ {
 "language": "GDScript",
 "path": "res://scripts/Terminal.gd"
 }, {
-"base": "GdUnitTestSuite",
-"class": "TerminalTest",
-"language": "GDScript",
-"path": "res://test/scripts/TerminalTest.gd"
-}, {
 "base": "Resource",
 "class": "TimeUnit",
 "language": "GDScript",
@@ -877,7 +872,6 @@ _global_script_class_icons={
 "StringFuzzer": "",
 "SystemElement": "",
 "Terminal": "",
-"TerminalTest": "",
 "TimeUnit": "",
 "Tokens": "",
 "ValueProvider": "",
@@ -892,6 +886,7 @@ _global_script_class_icons={
 
 config/name="Terminal"
 run/main_scene="res://Terminal.tscn"
+config/icon="res://icon.png"
 
 [display]
 

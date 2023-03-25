@@ -5,6 +5,7 @@ const INIT_TEXT = "Terminal M100 1.0.\nLe terminal fait maison [b]simplifié[/b]
 
 export(String) var user_name
 export(String) var group_name
+export(int) var pid = 42
 
 onready var interface: RichTextLabel = preload("res://addons/bash_in_godot/scenes/Interface.tscn").instance(); # the terminal
 onready var prompt: LineEdit = preload("res://addons/bash_in_godot/scenes/Prompt.tscn").instance(); # the input
@@ -29,6 +30,7 @@ func _ready():
 			SystemElement.new(0, ".secret", "/folder", "this is a secret", [], user_name, group_name)
 		], user_name, group_name)
 	])
+	terminal.pid = pid
 	interface.append_bbcode(INIT_TEXT)
 
 func _process(_delta):

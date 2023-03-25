@@ -12,3 +12,5 @@ const WRITING_REDIRECTION = ">"
 const APPEND_WRITING_REDIRECTION = ">>"
 const READING_REDIRECTION = "<"
 const AND = "&" # &, useful when we have "(n)>&(m)"
+const VARIABLE = "VAR"
+const EQUALS = "=" # "=" for variable affectations

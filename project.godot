@@ -25,6 +25,11 @@ _global_script_classes=[ {
 "path": "res://addons/gdUnit3/src/matchers/AnyClazzArgumentMatcher.gd"
 }, {
 "base": "Object",
+"class": "BashContext",
+"language": "GDScript",
+"path": "res://addons/bash_in_godot/scripts/BashContext.gd"
+}, {
+"base": "Object",
 "class": "BashParser",
 "language": "GDScript",
 "path": "res://addons/bash_in_godot/scripts/BashParser.gd"
@@ -743,6 +748,7 @@ _global_script_class_icons={
 "AnyArgumentMatcher": "",
 "AnyBuildInTypeArgumentMatcher": "",
 "AnyClazzArgumentMatcher": "",
+"BashContext": "",
 "BashParser": "",
 "BashToken": "",
 "CallBackValueProvider": "",

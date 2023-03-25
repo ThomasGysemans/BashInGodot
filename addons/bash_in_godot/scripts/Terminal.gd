@@ -30,6 +30,7 @@ signal directory_changed (target) # emitted when the `cd` command is used (and d
 signal interface_changed (content) # emitted when something is printed onto the screen. It is not emitted when the interface is cleared.
 signal manual_asked (command_name, output) # emitted when the `man` command is used to open the manual page of a command.
 signal help_asked (output) # emitted when the custom `help` command is used.
+signal variable_set (name, value, is_new) # emitted when a variable is created, "name" and "value" are strings, is_new is true if the variable was just created or false if it was modified.
 signal interface_cleared
 
 var user_name := "vous"
@@ -37,6 +38,13 @@ var group_name := "votre_groupe"
 var PWD := PathObject.new("/") # the absolute path we are currently on in the system_tree
 var system_tree := SystemElement.new(1, "/", "", "", [], user_name, group_name)
 var error_handler := ErrorHandler.new() # this will be used in case specific erros happen deep into the logic
+var pid := 42
+# The `runtime` variable holds all the execution contexts.
+# Bash usually creates only global variables no matter where they've been initialised.
+# We are not taking into account the "local" keyword.
+# The first index of this array will be the global context.
+# For now, we'll only have one context.
+var runtime := [BashContext.new()]
 
 func _display_error_or(error: String):
 	return error_handler.clear() if error_handler.has_error else error
@@ -244,9 +252,9 @@ var COMMANDS := {
 	"help": {
 		"reference": funcref(self, "help"),
 		"manual": {
-			"name": "help - commande custom si vous avez besoin d'aide.",
+			"name": "help - commande custom si vous avez besoin d'aide quant à Bash.",
 			"synopsis": ["[b]help[/b]"],
-			"description": "Cette commande est custom, elle permet d'obtenir de l'aide sur le fonctionnement même du terminal, ainsi que des indices si nécessaire.",
+			"description": "Le terminal vous permet d'exécuter des commandes de manière à manipuler les fichiers et dossiers de votre système. Une commande s'écrit généralement de la manière suivant : \"nom ...options ...arguments\". Chaque commande a ses spécificités. Pour en savoir plus sur une commande en particulier tapez : \"man nom_de_la_commande\", ce qui vous affichera la page du manuel correspondant à cette commande.",
 			"options": [],
 			"examples": []
 		}
@@ -254,7 +262,7 @@ var COMMANDS := {
 	"tree": {
 		"reference": funcref(self, "tree"),
 		"manual": {
-			"name": "tree - affiche une reconstitution de l'arborescence du dossier courant",
+			"name": "tree - affiche une reconstitution de l'arborescence du dossier courant.",
 			"synopsis": ["[b]tree[/b]"],
 			"description": "Cette commande est utile pour afficher le contenu du dossier courant, ainsi que le contenu des sous-dossiers, de façon à avoir une vue globale de l'environnement de travail. En revanche, elle ne permet pas de visualiser les fichiers cachés.",
 			"options": [],
@@ -278,6 +286,11 @@ var COMMANDS := {
 	}
 }
 
+# just adding the list of available commands in the right page,
+# because "COMMANDS" cannot be accessed in itself.
+func _init():
+	COMMANDS["help"].manual.description += " Voici une liste de toutes les commandes disponibles : " + ", ".join(COMMANDS.keys()) + "."
+
 func set_root(children: Array) -> void:
 	system_tree.children = children
 
@@ -288,59 +301,63 @@ func _write_to_redirection(redirection: Dictionary, output: String) -> void:
 		redirection.target.content += output
 
 func execute(input: String, interface: RichTextLabel = null) -> String:
-	var parser := BashParser.new(input)
+	var parser := BashParser.new(input, pid)
 	if not parser.error.empty():
 		return parser.error
-	var parsing := parser.parse()
+	var parsing := parser.parse(runtime[0])
 	if not parser.error.empty():
 		return parser.error
 	var standard_input := ""
 	for command in parsing:
-		var function = COMMANDS[command.name] if command.name in COMMANDS else null
-		# Because of the way we handle commands,
-		# we must make sure that the user cannot execute functions
-		# such as '_process' or '_ready'.
-		if function == null or not function.reference.is_valid() or command.name.begins_with("_"):
-			return "Cette commande n'existe pas."
-		else:
-			var command_redirections = interpret_redirections(command.redirections)
-			if error_handler.has_error:
-				return "Commande '" + command.name + "' : " + error_handler.clear()
-			for i in range(0, command_redirections.size()):
-				if command_redirections[i] != null and command_redirections[i].target == null:
-					return "Impossible de localiser, ni de créer, la destination du descripteur " + str(i) + "."
-			var result = function.reference.call_func(command.options, command_redirections[0].target.content if command_redirections[0] != null and command_redirections[0].type == Tokens.READING_REDIRECTION else standard_input)
-			if command_redirections[2] != null:
-				if result.error == null:
-					if command_redirections[2].type == Tokens.WRITING_REDIRECTION:
-						command_redirections[2].target.content = ""
-				else:
-					emit_signal("error_thrown", command, result.error)
-					if command_redirections[2].type == Tokens.WRITING_REDIRECTION:
-						command_redirections[2].target.content = "Commande '" + command.name + "' : " + result.error
-					elif command_redirections[2].type == Tokens.APPEND_WRITING_REDIRECTION:
-						command_redirections[2].target.content += "Commande '" + command.name + "' : " + result.error
-					return "" # if there is an error, we have to stop the program anyway
-			if result.error != null:
-				emit_signal("error_thrown", command, result.error)
-				return "Commande '" + command.name + "' : " + result.error
+		if command.type == "command":
+			var function = COMMANDS[command.name] if command.name in COMMANDS else null
+			# Because of the way we handle commands,
+			# we must make sure that the user cannot execute functions
+			# such as '_process' or '_ready'.
+			if function == null or not function.reference.is_valid() or command.name.begins_with("_"):
+				return "Cette commande n'existe pas."
 			else:
-				emit_signal("command_executed", command, result.output)
-				if command_redirections[0] != null:
-					# Even though it doesn't make any sense to try to write something
-					# to the standard input, Bash overwrites the content of the target anyway.
-					# We have to reproduce the same behaviour, no matter how weird it sounds.
-					# The output to apply on the standard input would always be an empty string.
-					# If the standard input doesn't have a writing redirection (> or >>),
-					# then this function won't do anything.
-					_write_to_redirection(command_redirections[0], "")
-				if command_redirections[1] != null:
-					_write_to_redirection(command_redirections[1], result.output)
+				var command_redirections = interpret_redirections(command.redirections)
+				if error_handler.has_error:
+					return "Commande '" + command.name + "' : " + error_handler.clear()
+				for i in range(0, command_redirections.size()):
+					if command_redirections[i] != null and command_redirections[i].target == null:
+						return "Impossible de localiser, ni de créer, la destination du descripteur " + str(i) + "."
+				var result = function.reference.call_func(command.options, command_redirections[0].target.content if command_redirections[0] != null and command_redirections[0].type == Tokens.READING_REDIRECTION else standard_input)
+				if command_redirections[2] != null:
+					if result.error == null:
+						if command_redirections[2].type == Tokens.WRITING_REDIRECTION:
+							command_redirections[2].target.content = ""
+					else:
+						emit_signal("error_thrown", command, result.error)
+						if command_redirections[2].type == Tokens.WRITING_REDIRECTION:
+							command_redirections[2].target.content = "Commande '" + command.name + "' : " + result.error
+						elif command_redirections[2].type == Tokens.APPEND_WRITING_REDIRECTION:
+							command_redirections[2].target.content += "Commande '" + command.name + "' : " + result.error
+						return "" # if there is an error, we have to stop the program anyway
+				if result.error != null:
+					emit_signal("error_thrown", command, result.error)
+					return "Commande '" + command.name + "' : " + result.error
 				else:
-					standard_input = result.output
-				if interface != null and command.name == "clear":
-					emit_signal("interface_cleared")
-					interface.text = ""
+					emit_signal("command_executed", command, result.output)
+					if command_redirections[0] != null:
+						# Even though it doesn't make any sense to try to write something
+						# to the standard input, Bash overwrites the content of the target anyway.
+						# We have to reproduce the same behaviour, no matter how weird it sounds.
+						# The output to apply on the standard input would always be an empty string.
+						# If the standard input doesn't have a writing redirection (> or >>),
+						# then this function won't do anything.
+						_write_to_redirection(command_redirections[0], "")
+					if command_redirections[1] != null:
+						_write_to_redirection(command_redirections[1], result.output)
+					else:
+						standard_input = result.output
+					if interface != null and command.name == "clear":
+						emit_signal("interface_cleared")
+						interface.text = ""
+		else: # the line is a variable affectation
+			var is_new = runtime[0].set_variable(command.name, command.value) # command.value is a BashToken
+			emit_signal("variable_set", command.name, command.value.value, is_new)
 	if interface != null and not standard_input.empty():
 		emit_signal("interface_changed", standard_input)
 		interface.append_bbcode(standard_input)
@@ -572,6 +589,8 @@ func man(options: Array, _standard_input: String) -> Dictionary:
 		return {
 			"error": "'" + options[0].value + "' est une commande inconnue"
 		}
+	if options[0].value == "help":
+		return help([], "")
 	var page := build_manual_page_using(COMMANDS[options[0].value].manual)
 	emit_signal("manual_asked", options[0].value, page)
 	return {
@@ -585,7 +604,8 @@ func help(options: Array, _standard_input: String) -> Dictionary:
 		return {
 			"error": "aucun argument n'est attendu"
 		}
-	var page := build_manual_page_using(COMMANDS["help"].manual)
+	var manual = COMMANDS["help"].manual
+	var page := build_manual_page_using(manual)
 	emit_signal("help_asked", page)
 	return {
 		"output": page,

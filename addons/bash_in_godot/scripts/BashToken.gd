@@ -3,10 +3,12 @@ class_name BashToken
 
 var type: String
 var value = null
+var metadata = null # metadata will be null for all tokens except for STRING because we need to know what quotes were used.
 
-func _init(t: String, v):
+func _init(t: String, v, m = null):
 	type = t
 	value = v
+	metadata = m
 
 func is_plain() -> bool:
 	return type == Tokens.PLAIN
@@ -17,8 +19,11 @@ func is_flag() -> bool:
 func is_flag_and_equals(name: String):
 	return is_flag() and value == name
 
+func is_string() -> bool:
+	return type == Tokens.STRING
+
 func is_word() -> bool:
-	return type == Tokens.STRING or is_plain()
+	return is_string() or is_plain()
 
 func is_pipe() -> bool:
 	return type == Tokens.PIPE
@@ -44,9 +49,15 @@ func is_reading_redirection() -> bool:
 func is_redirection() -> bool:
 	return is_writing_redirection() or is_append_writing_redirection() or is_reading_redirection()
 
+func is_equal_sign() -> bool:
+	return type == Tokens.EQUALS
+
+func is_variable() -> bool:
+	return type == Tokens.VARIABLE
+
 # (n)>&(m)
 func is_and() -> bool:
 	return type == Tokens.AND
 
 func _to_string():
-	return "[" + type + ":" + str(value) + "]"
+	return "[" + type + ":" + str(value) + ("(" + str(metadata) + ")" if metadata != null else "") + "]"

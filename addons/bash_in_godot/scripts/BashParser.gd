@@ -4,10 +4,12 @@ class_name BashParser
 var command: String
 var tokens_list := []
 var error := ""
+var pid := 42
 
-func _init(c: String):
+func _init(c: String, p: int):
 	command = c.strip_edges()
 	tokens_list = _read(command)
+	pid = p
 
 # Transforms the input as a list of tokens
 # so that it is easier to read for an algorithm.
@@ -22,10 +24,27 @@ func _read(input: String) -> Array:
 	var pos := 0
 	var result := []
 	var length := input.length()
+	var can_accept_variable := true # a variable affectation must be the very first thing on the line, but note that "a=5 b=6" is possible
 	while pos < length:
 		if input[pos] == " ":
 			pos += 1
 			continue
+		elif input[pos] == "$":
+			pos += 1
+			if pos >= length or input[pos] == " ":
+				result.append(BashToken.new(Tokens.PLAIN, "$"))
+				break
+			elif input[pos] == "$":
+				result.append(BashToken.new(Tokens.VARIABLE, "$")) # the pid number ($$)
+			else:
+				var name = _read_identifier(input, pos, length, false)
+				if name.token.value.is_valid_identifier():
+					result.append(BashToken.new(Tokens.VARIABLE, name.token.value))
+				else:
+					# if the identifier is not valid,
+					# return a PLAIN token with value "$" + the identifier
+					result.append(BashToken.new(Tokens.PLAIN, "$" + name.token.value))
+				pos = name.pos
 		elif input[pos] == "0" or input[pos] == "1" or input[pos] == "2":
 			var descriptor := input[pos]
 			var word_pos := pos
@@ -42,7 +61,7 @@ func _read(input: String) -> Array:
 			else:
 				# It was actually an identifier starting with this number
 				if redirection.token == null:
-					var identifier := _read_identifier(input, word_pos, length)
+					var identifier := _read_identifier(input, word_pos, length, true)
 					result.append(identifier.token)
 					pos = identifier.pos
 					continue
@@ -85,13 +104,17 @@ func _read(input: String) -> Array:
 				return []
 			else:
 				pos += parsed_string.value.length() + 2
-			result.append(BashToken.new(Tokens.STRING, parsed_string.value))
+			result.append(BashToken.new(Tokens.STRING, parsed_string.value, { "quote": parsed_string.quote }))
 		elif input[pos] == "|":
 			result.append(BashToken.new(Tokens.PIPE, null))
+			can_accept_variable = true # echo yoyo | yoyo=55 is possible
 		elif input[pos] == "-":
 			pos += 1
 			if pos >= length or input[pos] == " ":
 				result.append(BashToken.new(Tokens.PLAIN, "-"))
+			elif input[pos] == "$":
+				result.append(BashToken.new(Tokens.PLAIN, "-"))
+				continue
 			else:
 				if input[pos] == "-":
 					pos += 1
@@ -109,20 +132,46 @@ func _read(input: String) -> Array:
 					while pos < length and input[pos] != " ":
 						result.append(BashToken.new(Tokens.FLAG, input[pos]))
 						pos += 1
-		else: # an identifier (Tokens.PLAIN)
-			var identifier := _read_identifier(input, pos, length)
+		else: # an identifier (Tokens.PLAIN), which might also be a variable affectation
+			var identifier := _read_identifier(input, pos, length, !can_accept_variable)
+			if identifier.token.value.empty(): # in case we have input = "=2"
+				can_accept_variable = false
+				continue
 			result.append(identifier.token)
 			pos = identifier.pos
+			if pos < length and input[pos] == "=":
+				pos += 1
+				if can_accept_variable:
+					result.append(BashToken.new(Tokens.EQUALS, null))
+					if pos < length:
+						var value = _read_identifier(input, pos, length, true)
+						result.append(value.token)
+						pos = value.pos + 1
+					else:
+						result.append(BashToken.new(Tokens.PLAIN, "")) # it's possible to write "variable="
+				else:
+					if pos < length and input[pos] != " ":
+						var next = _read_identifier(input, pos, length, true)
+						result[-1].value += "=" + next.token.value
+						pos = next.pos + 1
+			else:
+				can_accept_variable = false # meaning it was something else, so after that no variable affectation can be made.
+			continue
 		pos += 1
 	result.append(BashToken.new(Tokens.EOF, null))
 	return result
 
 # Reads a word, a path (something that isn't anything else)
-func _read_identifier(input: String, pos: int, length: int) -> Dictionary:
+func _read_identifier(input: String, pos: int, length: int, count_equals_sign: bool) -> Dictionary:
 	var identifier := ""
-	while pos < length and input[pos] != " ":
-		identifier += input[pos]
-		pos += 1
+	if count_equals_sign: # we want to include "=" in the identifier
+		while pos < length and input[pos] != " " and input[pos] != "$":
+			identifier += input[pos]
+			pos += 1
+	else: # we don't want to include the "=" in the indentifier (hence stopping as soon as we encounter one)
+		while pos < length and input[pos] != " " and input[pos] != "$" and input[pos] != "=":
+			identifier += input[pos]
+			pos += 1
 	return {
 		"token": BashToken.new(Tokens.PLAIN, identifier),
 		"pos": pos
@@ -131,24 +180,25 @@ func _read_identifier(input: String, pos: int, length: int) -> Dictionary:
 # Reads a string ("yo", 'yo')
 func _read_string(content: String):
 	var cursor := 0
-	var string_opener := ""
+	var quote := ""
 	var result := ""
 	var closed := false
 	while cursor < content.length():
 		if _is_char_quote(content[cursor]):
-			if content[cursor] == string_opener:
+			if content[cursor] == quote:
 				if content[cursor - 1] != "\\":
 					closed = true
 					break
 			else:
-				if string_opener.empty():
-					string_opener = content[cursor]
+				if quote.empty():
+					quote = content[cursor]
 		if content[cursor] != "\\":
 			result += content[cursor]	
 		cursor += 1
 	return {
 		"value": result.strip_edges().substr(1, result.length() - 1),
-		"string_closed": closed
+		"string_closed": closed,
+		"quote": quote
 	}
 
 # When we are executing this function, it's because we've just seen a number (0, 1 or 2).
@@ -208,48 +258,72 @@ func _read_redirection(input: String, pos: int, length: int) -> Dictionary:
 # would give:
 # [
 #   {
+#     "type": "command",
 #     "name": "echo",
 #     "options": ["-n", "yoyo"],
 #     "redirections": []
 #   },
 #   {
+#     "type": "command"
 #     "name": "tr",
 #     "options": ["y", "t"],
 #     "redirections": []
 #   }
 # ]
 # If the command has redirections, it will look something like this:
-# { "port": 1, "type": Tokens.WRITING_REDIRECTION, "target": "file.txt", "copied": false }
+# "redirections": [{ "port": 1, "type": Tokens.WRITING_REDIRECTION, "target": "file.txt", "copied": false }]
 # == 1>file.txt
 # if "copied" is `true`:
 # == 1>&2 (target is the same as the redirection of port 2)
-func parse() -> Array:
+# Finally, if the line is just a variable affectation (yoyo=5 for example), then:
+# [
+#   {
+#     "type": "variable",
+#     "name": "yo",
+#     "value": BashToken
+#   }
+# ]
+func parse(context: BashContext) -> Array:
 	var i := 0
 	var commands := []
 	var number_of_tokens := tokens_list.size()
+	var interpreted_tokens_list := interpret_tokens_variables_with(context)
+	# Probably one of the weirdest thing in Bash:
+	# variables affectations are ignored when they follow, or are followed by, a pipe.
+	# As a consequence, we'll remove from the output of the parsing algorithm all variable affectations.
+	var has_pipe := false
+	for t in interpreted_tokens_list:
+		if t.is_pipe():
+			has_pipe = true
+			break
 	while i < number_of_tokens:
-		var r = _parse_command(tokens_list.slice(i, number_of_tokens) if i > 0 else tokens_list)
+		var r = _parse_command(interpreted_tokens_list.slice(i, number_of_tokens) if i > 0 else interpreted_tokens_list)
 		if r is String:
 			error = r
 			return []
-		commands.append(r.command)
 		i += r.number_of_read_tokens
+		if has_pipe and r.command.type == "variable":
+			break
+		commands.append(r.command)
 		if i < number_of_tokens:
-			if tokens_list[i].is_pipe():
+			if interpreted_tokens_list[i].is_pipe():
 				i += 1
-			elif tokens_list[i].is_eof():
+			elif interpreted_tokens_list[i].is_eof():
 				break
 	return commands
 
-func _parse_command(list:Array):
+func _parse_command(list: Array):
 	if list.empty() or list[0].is_eof():
 		return "Erreur de syntaxe : BASH attendait une commande mais il n'y a rien."
 	if list[0].type != Tokens.PLAIN:
 		return "Erreur de syntaxe : '" + str(list[0].value) + "' n'est pas une commande."
-	var c := { "name": list[0].value, "options": [], "redirections": [] }
-	var i := 1
-	var found_redirection := false
+	var is_variable_affectation: bool = list.size() > 1 and list[1].is_equal_sign()
+	if is_variable_affectation and not list[0].value.is_valid_identifier():
+		return "Erreur de syntaxe : l'identifiant '" + list[0].value + "' n'est pas un nom de variable valide."
+	var c := { "type": "command", "name": list[0].value, "options": [], "redirections": [] } if not is_variable_affectation else { "type": "variable", "name": list[0].value, "value": null }
 	var number_of_tokens = list.size()
+	var found_redirection := false
+	var i := 1
 	while i < number_of_tokens:
 		if list[i].is_pipe() or list[i].is_eof():
 			break
@@ -282,12 +356,79 @@ func _parse_command(list:Array):
 		else:
 			if found_redirection:
 				return "Erreur de syntaxe : fin de commande attendue"
-			c.options.append(list[i])
+			if list[i].is_equal_sign():
+				i += 1 # ignoring the "="
+				c.value = list[i] # getting the value, and even if the value is empty ("a=") it will have a PLAIN token afterwards
+				i += 1 # jumping over the value
+				break # we want to end it now, even if there is another affectation right after ("a=5 b=7")
+			else:
+				c.options.append(list[i])
 		i += 1
 	return {
 		"number_of_read_tokens": i,
 		"command": c
 	}
+
+func interpret_tokens_variables_with(context: BashContext) -> Array:
+	var list := []
+	for i in range(0, tokens_list.size()):
+		var token = tokens_list[i]
+		if token.is_variable():
+			# If multiple variables are chained like this: "$$$yoyo"
+			# then we want a single token representing the concatenation of their value.
+			# To do that, If we detect that the previous token that we interpreted was also a variable,
+			# then we add to the value of the previous interpreted token the interpreted value of the current token.
+			var value: String = str(pid) if token.value == "$" else context.get_variable_value(token.value)
+			if i > 0 and tokens_list[i-1].is_variable():
+				list[i-1].value += value
+			else:
+				list.append(BashToken.new(Tokens.PLAIN, value))
+		elif token.is_string():
+			if token.metadata.quote == "'":
+				list.append(token)
+			else:
+				list.append(interpret_string(token, context))
+		elif token.is_plain() and token.value == "$$":
+			list.append(BashToken.new(Tokens.PLAIN, str(pid)))
+		else:
+			list.append(token)
+	return list
+
+func interpret_string(token: BashToken, context) -> BashToken:
+	var identifier := ""
+	var identifier_pos := 0
+	var i := 0
+	var value_to_add := ""
+	var new_token := BashToken.new(Tokens.STRING, "", { "quote": '"' })
+	while i < token.value.length():
+		if token.value[i] == "$":
+			identifier_pos = i
+			i += 1
+			if i >= token.value.length():
+				new_token.value += "$"
+				break
+			if token.value[i] == "$":
+				identifier = "$$"
+				i += 1
+			elif token.value[i] == " ":
+				new_token.value += "$"
+				continue
+			else:
+				while i < token.value.length() and token.value[i] != " ":
+					if not (identifier + token.value[i]).is_valid_identifier():
+						break
+					identifier += token.value[i]
+					i += 1
+			if identifier == "$$":
+				value_to_add = str(pid)
+			else:
+				value_to_add = context.get_variable_value(identifier)
+			new_token.value += value_to_add
+			identifier = ""
+		else:
+			new_token.value += token.value[i]
+			i += 1
+	return new_token
 
 func _is_char_quote(character: String) -> bool:
 	return character == '"' or character == "'"

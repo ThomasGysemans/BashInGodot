@@ -1,5 +1,5 @@
 #warning-ignore-all:return_value_discarded
-extends Panel
+extends Object
 class_name Terminal
 
 # The signal `interface_changed` can be used to read the standard output of a successful command.
@@ -33,12 +33,12 @@ signal help_asked (output) # emitted when the custom `help` command is used.
 signal variable_set (name, value, is_new) # emitted when a variable is created, "name" and "value" are strings, is_new is true if the variable was just created or false if it was modified.
 signal interface_cleared
 
-var user_name := "vous"
-var group_name := "votre_groupe"
-var PWD := PathObject.new("/") # the absolute path we are currently on in the system_tree
-var system_tree := SystemElement.new(1, "/", "", "", [], user_name, group_name)
+var user_name := "vous" # the currently logged in user's name
+var group_name := "votre_groupe" # the currently logged in user's group name
 var error_handler := ErrorHandler.new() # this will be used in case specific erros happen deep into the logic
-var pid := 42
+var system: System # we'll start the terminal with an empty root by default
+var PWD := PathObject.new("/") # the absolute path we are currently on in the `system`
+var pid := 42 # the number of the current process
 # The `runtime` variable holds all the execution contexts.
 # Bash usually creates only global variables no matter where they've been initialised.
 # We are not taking into account the "local" keyword.
@@ -286,13 +286,14 @@ var COMMANDS := {
 	}
 }
 
-# just adding the list of available commands in the right page,
-# because "COMMANDS" cannot be accessed in itself.
-func _init():
+# Define a terminal with its unique PID.
+# Set what System the terminal has to be using.
+func _init(p: int, sys: System):
+	pid = p
+	system = sys
+	# just adding the list of available commands in the right page,
+	# because "COMMANDS" cannot be accessed in itself.
 	COMMANDS["help"].manual.description += " Voici une liste de toutes les commandes disponibles : " + ", ".join(COMMANDS.keys()) + "."
-
-func set_root(children: Array) -> void:
-	system_tree.children = children
 
 func _write_to_redirection(redirection: Dictionary, output: String) -> void:
 	if redirection.type == Tokens.WRITING_REDIRECTION:
@@ -368,42 +369,20 @@ func execute(input: String, interface: RichTextLabel = null) -> String:
 # or returns false if a particular error happened during the process,
 # such as denial of permission (x)
 func get_file_element_at(path: PathObject):
-	var base: SystemElement
-	if path.is_absolute():
-		base = system_tree
-		var found = false
-		for i in range(0, path.segments.size()):
-			for child in base.children:
-				if not base.can_execute_or_go_through():
-					return error_handler.throw_permission_error()
-				if child.filename == path.segments[i]:
-					base = child
-					found = true
-					break
-			if not found:
-				return null
-			found = false
-	else:
-		base = get_pwd_file_element()
-		var segments = (path.segments if not path.segments.empty() else [path.path])
-		for segment in segments:
-			if segment == ".":
-				continue
-			else:
-				if segment == "..":
-					var dest: String = base.absolute_path.path.substr(0, base.absolute_path.path.find_last("/"))
-					if dest.length() == 0:
-						base = system_tree
-					else:
-						base = get_file_element_at(PathObject.new(dest))
-				else:
-					if base == null:
-						return null
-					base = get_file_element_at(PathObject.new(base.absolute_path.path + ("" if base.absolute_path.equals("/") else "/") + segment))
-	return base
+	var result = system.get_file_element_at(path, PWD) # might be SystemElement, null or String
+	if result is String: # if we got a String, it means it was a specific error
+		return error_handler.throw_error(result)
+	return result
 
+# Pretty much the same thing as `get_file_elemen_at`
+# but because we know we want to get the element located at PWD,
+# we use this to gain a little bit of performance.
+# We don't want to end up using `system.get_file_element_at(PWD, PWD)`.
 func get_pwd_file_element() -> SystemElement:
-	return get_file_element_at(PWD)
+	var result = system.get_element_with_absolute_path(PWD)
+	if result is String:
+		return error_handler.throw_error(result)
+	return result
 
 func get_parent_element_from(path: PathObject) -> SystemElement:
 	return get_file_element_at(PathObject.new(path.parent) if path.parent != null else PWD)

@@ -1,14 +1,15 @@
 extends Object
 class_name SystemElement
 
-const X = 1
-const W = 2
-const R = 4
-
 # this is a class meant to describe an element in a system tree.
 # the root will always be a folder of name "/".
 # Everything should inherit from such folder.
-# The root is also the only element authorized to have no parent
+# The root is also the only element authorized to have no parent.
+
+# the numeric values of each kind of permission
+const X = 1 # execution/crossing
+const W = 2 # writing
+const R = 4 # reading
 
 var type: int # either 0 for file or 1 for folder
 var filename: String # the name of the file
@@ -16,7 +17,7 @@ var base_dir: String # the parent absolute path. For root it would be an empty s
 var content: String # only if it's a file, otherwise empty string ("")
 var children := [] # an array of SystemElement. Typed arrays will only be possible in Godot v4
 var absolute_path = null # computed and immutable value
-var permissions: String
+var permissions: String # the octal format (777)
 var creation_date := Time.get_datetime_dict_from_system()
 var creator_name := "unknown"
 var group_name := "unknown"
@@ -40,6 +41,15 @@ static func are_permissions_valid(p: String) -> bool:
 	var result := regex.search(p)
 	return result != null
 
+# A SystemElement represents a file or a folder (it's kind of the same thing).
+# Here the list of parameters:
+# - t: the type of the element. 0 for a file, 1 for a folder.
+# - name: the name of the element.
+# - p: the absolute path of the parent of the element (the path to where it is contained).
+# - c: the content of the file (USE THIS ONLY IF t=0)
+# - ch: the children of the folder (USE THIS ONLY IF t=1)
+# - creator: the name of the user that created this file.
+# - group: the name of the group that created this file.
 func _init(t: int, name: String, p, c = "", ch = [], creator: String = "", group: String = ""):
 	type = t
 	filename = name

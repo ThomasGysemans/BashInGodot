@@ -690,11 +690,16 @@ _global_script_classes=[ {
 "path": "res://addons/gdUnit3/src/fuzzers/StringFuzzer.gd"
 }, {
 "base": "Object",
+"class": "System",
+"language": "GDScript",
+"path": "res://addons/bash_in_godot/scripts/System.gd"
+}, {
+"base": "Object",
 "class": "SystemElement",
 "language": "GDScript",
 "path": "res://addons/bash_in_godot/scripts/SystemElement.gd"
 }, {
-"base": "Panel",
+"base": "Object",
 "class": "Terminal",
 "language": "GDScript",
 "path": "res://addons/bash_in_godot/scripts/Terminal.gd"
@@ -881,6 +886,7 @@ _global_script_class_icons={
 "RichTextLabelExt": "",
 "SignalHandler": "",
 "StringFuzzer": "",
+"System": "",
 "SystemElement": "",
 "Terminal": "",
 "TerminalTest": "",
@@ -907,7 +913,11 @@ window/size/height=720
 
 [editor_plugins]
 
-enabled=PoolStringArray( "res://addons/gdUnit3/plugin.cfg" )
+enabled=PoolStringArray( "res://addons/bash_in_godot/plugin.cfg", "res://addons/gdUnit3/plugin.cfg" )
+
+[global]
+
+scene=false
 
 [gui]
 

@@ -1,0 +1,30 @@
+[gd_scene load_steps=3 format=2]
+
+[ext_resource path="res://demo-system.gd" type="Script" id=1]
+[ext_resource path="res://addons/bash_in_godot/scripts/ConsoleNode.gd" type="Script" id=2]
+
+[node name="Control" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="Console" type="Panel" parent="."]
+margin_left = 57.0
+margin_top = 116.0
+margin_right = 608.0
+margin_bottom = 496.0
+script = ExtResource( 2 )
+user_name = "thomas"
+group_name = "bogoss"
+system_reference_node = NodePath("../Node2D")
+
+[node name="Console2" type="Panel" parent="."]
+margin_left = 670.0
+margin_top = 118.0
+margin_right = 1206.0
+margin_bottom = 492.0
+script = ExtResource( 2 )
+user_name = "aymeri"
+group_name = "nullosse"
+
+[node name="Node2D" type="Node2D" parent="."]
+script = ExtResource( 1 )

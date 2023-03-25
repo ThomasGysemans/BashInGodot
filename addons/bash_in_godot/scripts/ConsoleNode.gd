@@ -5,16 +5,29 @@ const INIT_TEXT = "Terminal M100 1.0.\nLe terminal fait maison [b]simplifié[/b]
 
 export(String) var user_name
 export(String) var group_name
-export(int) var pid = 42
+export(NodePath) var system_reference_node
+export(int) var pid = -1
 
 onready var interface: RichTextLabel = preload("res://addons/bash_in_godot/scenes/Interface.tscn").instance(); # the terminal
 onready var prompt: LineEdit = preload("res://addons/bash_in_godot/scenes/Prompt.tscn").instance(); # the input
 
-var terminal := Terminal.new()
+var terminal := Terminal.new(pid, System.new([]))
 var history := [] # array of strings containing all previous entered commands
 var history_index := 0 # the position in the history. By default, it will have the size of the history array as value
 
+func set_system(system_reference: System) -> void:
+	terminal.system = system_reference
+	terminal.PWD = PathObject.new("/") # just in case the user was already somewhere else when this function was called.
+
 func _ready():
+	if pid < 0:
+		pid = randi()%10000+1
+	terminal.pid = pid
+	terminal.user_name = user_name
+	terminal.group_name = group_name
+	var node := get_node_or_null(system_reference_node)
+	if node != null and "system" in node:
+		terminal.system = node.system
 	add_child(interface)
 	add_child(prompt)
 	prompt.connect("text_entered", self, "_on_command_entered")
@@ -23,14 +36,6 @@ func _ready():
 		terminal.user_name = user_name
 	if group_name != null:
 		terminal.group_name = group_name
-	terminal.set_root([
-		SystemElement.new(0, "file.txt", "/", "Ceci est le contenu du fichier.", [], user_name, group_name),
-		SystemElement.new(1, "folder", "/", "", [
-			SystemElement.new(0, "answer_to_life.txt", "/folder", "42", [], user_name, group_name),
-			SystemElement.new(0, ".secret", "/folder", "this is a secret", [], user_name, group_name)
-		], user_name, group_name)
-	])
-	terminal.pid = pid
 	interface.append_bbcode(INIT_TEXT)
 
 func _process(_delta):

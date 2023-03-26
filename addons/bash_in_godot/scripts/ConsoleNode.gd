@@ -104,8 +104,8 @@ func _on_command_entered(new_text: String):
 	history_index = history.size()
 	_print_command(new_text)
 	var result := terminal.execute(new_text, interface)
-	if not result.empty():
-		_print_error(result)
+	if result.error != null:
+		_print_error(result.error)
 
 func _print_command(command: String):
 	interface.append_bbcode("$ " +  command + "\n")

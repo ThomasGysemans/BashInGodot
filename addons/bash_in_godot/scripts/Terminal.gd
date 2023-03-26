@@ -32,6 +32,7 @@ signal interface_changed (content) # emitted when something is printed onto the 
 signal manual_asked (command_name, output) # emitted when the `man` command is used to open the manual page of a command.
 signal help_asked (output) # emitted when the custom `help` command is used.
 signal variable_set (name, value, is_new) # emitted when a variable is created, "name" and "value" are strings, is_new is true if the variable was just created or false if it was modified.
+signal script_executed (script, output) # emitted when a script was executed. `script` is the instance of SystemElement of the script, `output` is the complete output printed in the interface/
 signal interface_cleared
 
 var nano_editor = null
@@ -330,29 +331,60 @@ func _write_to_redirection(redirection: Dictionary, output: String) -> void:
 	elif redirection.type == Tokens.APPEND_WRITING_REDIRECTION:
 		redirection.target.content += output
 
-func execute(input: String, interface: RichTextLabel = null) -> String:
+func execute(input: String, interface: RichTextLabel = null) -> Dictionary:
 	var parser := BashParser.new(input, pid)
 	if not parser.error.empty():
-		return parser.error
+		return {
+			"error": parser.error
+		}
 	var parsing := parser.parse(runtime[0])
 	if not parser.error.empty():
-		return parser.error
+		return {
+			"error": parser.error
+		}
 	var standard_input := ""
+	var cleared := false
 	for command in parsing:
 		if command.type == "command":
 			var function = COMMANDS[command.name] if command.name in COMMANDS else null
-			# Because of the way we handle commands,
-			# we must make sure that the user cannot execute functions
-			# such as '_process' or '_ready'.
-			if function == null or not function.reference.is_valid() or command.name.begins_with("_"):
-				return "Cette commande n'existe pas."
+			if function == null and command.name.find('/') != -1:
+				var path_to_executable := PathObject.new(command.name)
+				if path_to_executable.is_valid:
+					var executable = get_file_element_at(path_to_executable)
+					if error_handler.has_error:
+						return {
+							"error": error_handler.clear()
+						}
+					if executable == null:
+						return {
+							"error": "Le fichier n'existe pas"
+						}
+					if not executable.is_file():
+						return {
+							"error": "L'élément n'est pas un fichier !"
+						}
+					if not executable.can_execute_or_go_through():
+						return {
+							"error": "Permission refusée"
+						}
+					return execute_file(executable, command.options, interpret_redirections(command.redirections), interface)
+			# if the function doesn't exist,
+			# function.reference.is_valid() will be false.
+			if function == null or not function.reference.is_valid():
+				return {
+					"error": "Cette commande n'existe pas."
+				}
 			else:
 				var command_redirections = interpret_redirections(command.redirections)
 				if error_handler.has_error:
-					return "Commande '" + command.name + "' : " + error_handler.clear()
+					return {
+						"error": "Commande '" + command.name + "' : " + error_handler.clear()
+					}
 				for i in range(0, command_redirections.size()):
 					if command_redirections[i] != null and command_redirections[i].target == null:
-						return "Impossible de localiser, ni de créer, la destination du descripteur " + str(i) + "."
+						return {
+							"error": "Impossible de localiser, ni de créer, la destination du descripteur " + str(i) + "."
+						}
 				var result = function.reference.call_func(command.options, command_redirections[0].target.content if command_redirections[0] != null and command_redirections[0].type == Tokens.READING_REDIRECTION else standard_input)
 				if command_redirections[2] != null:
 					if result.error == null:
@@ -364,10 +396,15 @@ func execute(input: String, interface: RichTextLabel = null) -> String:
 							command_redirections[2].target.content = "Commande '" + command.name + "' : " + result.error
 						elif command_redirections[2].type == Tokens.APPEND_WRITING_REDIRECTION:
 							command_redirections[2].target.content += "Commande '" + command.name + "' : " + result.error
-						return "" # if there is an error, we have to stop the program anyway
+						return {
+							"output": "",
+							"error": null
+						} # if there is an error, we have to stop the program anyway
 				if result.error != null:
 					emit_signal("error_thrown", command, result.error)
-					return "Commande '" + command.name + "' : " + result.error
+					return {
+						"error": "Commande '" + command.name + "' : " + result.error
+					}
 				else:
 					emit_signal("command_executed", command, result.output)
 					if command_redirections[0] != null:
@@ -382,17 +419,76 @@ func execute(input: String, interface: RichTextLabel = null) -> String:
 						_write_to_redirection(command_redirections[1], result.output)
 					else:
 						standard_input = result.output
-					if interface != null and command.name == "clear":
-						emit_signal("interface_cleared")
-						interface.text = ""
+					if command.name == "clear":
+						cleared = true
+						if interface != null:
+							emit_signal("interface_cleared")
+							interface.text = ""
 		else: # the line is a variable affectation
 			var is_new = runtime[0].set_variable(command.name, command.value) # command.value is a BashToken
 			emit_signal("variable_set", command.name, command.value.value, is_new)
 	if interface != null and not standard_input.empty():
 		emit_signal("interface_changed", standard_input)
 		interface.append_bbcode(standard_input)
-	return ""
+	return {
+		"output": standard_input,
+		"interface_cleared": cleared,
+		"error": null
+	}
 
+# Executes a script.
+# We assume that the given file is executable.
+# Note that the standard input is ignored.
+# Also, because there is no functions in our Bash,
+# we don't interpret the arguments (`options`) given to the command.
+func execute_file(file: SystemElement, options: Array, redirections: Array, interface: RichTextLabel = null) -> Dictionary:
+	var lines = file.content.split("\n")
+	var output := "" # the output will be the list of the output of each line
+	for line in lines:
+		if line.begins_with("#"): # ignore comments (line starting with '#')
+			continue
+		else:
+			var result := execute(line, null)
+			if redirections[2] != null:
+				if result.error == null:
+					if redirections[2].type == Tokens.WRITING_REDIRECTION:
+						redirections[2].target.content = ""
+				else:
+					if redirections[2].type == Tokens.WRITING_REDIRECTION:
+						redirections[2].target.content = result.error
+					elif redirections[2].type == Tokens.APPEND_WRITING_REDIRECTION:
+						redirections[2].target.content += result.error
+					return {
+						"output": "",
+						"error": null
+					}
+			if result.error != null:
+				return {
+					"error": result.error
+				}
+			else:
+				output += result.output
+				if interface != null and result.interface_cleared:
+					interface.text = ""
+					output = "" # reset the output
+	# The redirections must be treated after the end of the script,
+	# except for the port number 2 because it has to stop the execution.
+	if redirections[0] != null:
+		_write_to_redirection(redirections[0], "") # the weird behaviour described above, in `execute()`
+	if redirections[1] != null:
+		# If a standard output is used in the command,
+		# then it will receive the content of the combined outputs
+		_write_to_redirection(redirections[1], output)
+		emit_signal("script_executed", file, output)
+		output = "" # the command (the execution of the script itself) won't output anything, just like any other command
+	elif interface != null and not output.empty():
+		interface.append_bbcode(output)
+		emit_signal("script_executed", file, output)
+	return {
+		"output": output, # Do not use it to display content on the interface because it would be duplicated. `execute` already prints on the interface, unless you set `interface` to null.
+		"error": null
+	}
+ 
 # Returns the SystemElement instance located at the given path.
 # Returns null if the element doesn't exist,
 # or returns false if a particular error happened during the process,

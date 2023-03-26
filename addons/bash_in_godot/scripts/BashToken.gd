@@ -16,6 +16,14 @@ func is_plain() -> bool:
 func is_flag() -> bool:
 	return type == Tokens.FLAG or type == Tokens.LONG_FLAG
 
+func is_negative_digit() -> bool:
+	if type == Tokens.FLAG:
+		if value.is_valid_integer():
+			return int("-" + value) < 0
+		else:
+			return false
+	return false
+
 func is_flag_and_equals(name: String):
 	return is_flag() and value == name
 

@@ -291,12 +291,36 @@ var COMMANDS := {
 	"nano": {
 		"reference": funcref(self, "nano"),
 		"manual": {
-			"name": "nano - ouvre un éditeur pour éditer un fichier dans le terminal",
+			"name": "nano - ouvre un éditeur pour éditer un fichier dans le terminal.",
 			"synopsis": ["[b]nano[/b] [u]fichier[/u]"],
 			"description": "Nano est l'éditeur par défaut de Bash. Utilisez cette commande pour éditer un fichier déjà existant. Si le fichier cible n'existe pas il sera créé. La version de Nano proposée ici est modifiée pour convenir à une utilisation à la souris.",
 			"options": [],
 			"examples": [
 				"nano file.txt"
+			]
+		}
+	},
+	"seq": {
+		"reference": funcref(self, "seq"),
+		"manual": {
+			"name": "seq - affiche une séquence de nombre.",
+			"synopsis": ["[b]seq[/b] [[b]-s[/b] [u]string[/u]] [[b]-t[/b] [u]string[/u]] [[u]début[/u] [[u]saut[/u]]] [u]fin[/u]"],
+			"description": "Affiche une séquence de nombres, avec un nombre par ligne. La séquence commence à 1 par défaut et s'incrémente de 1 par défaut (le \"saut\" est de 1). Si la fin est inférieure au début, le saut sera par défaut de -1. Si le saut donné n'est pas négatif, une erreur sera renvoyée. Le séparateur entre chaque nombre peut être défini avec l'option -s, et la fin de la séquence peut être personnalisée avec l'option -t.",
+			"options": [
+				{
+					"name": "s",
+					"description": "Permet de définir le séparateur entre chaque nombre de la séquence."
+				},
+				{
+					"name": "t",
+					"description": "Permet d'afficher une chaine de caractères précise à la fin de la séquence."
+				}
+			],
+			"examples": [
+				"seq 10 0",
+				"seq 10 5 50",
+				"seq -s ',' 10 20",
+				"seq -t 'LANCEMENT' 10 0"
 			]
 		}
 	}
@@ -351,13 +375,9 @@ func execute(input: String, interface: RichTextLabel = null) -> Dictionary:
 				var path_to_executable := PathObject.new(command.name)
 				if path_to_executable.is_valid:
 					var executable = get_file_element_at(path_to_executable)
-					if error_handler.has_error:
-						return {
-							"error": error_handler.clear()
-						}
 					if executable == null:
 						return {
-							"error": "Le fichier n'existe pas"
+							"error": _display_error_or("Le fichier n'existe pas")
 						}
 					if not executable.is_file():
 						return {
@@ -829,6 +849,10 @@ func cat(options: Array, standard_input: String) -> Dictionary:
 		return {
 			"output": standard_input,
 			"error": null
+		}
+	if not options[0].is_word():
+		return {
+			"error": "un chemin est attendu"
 		}
 	var path = PathObject.new(options[0].value)
 	if not path.is_valid:
@@ -1446,3 +1470,70 @@ func _on_nano_saved() -> void:
 	emit_signal("file_changed", edited_file)
 	(nano_editor as WindowDialog).hide()
 	edited_file = null
+
+func seq(options: Array, _standard_input: String) -> Dictionary:
+	var start = null
+	var step = null
+	var end = null
+	var separator := "\n"
+	var ending := ""
+	var numbers := []
+	var i := 0
+	while i < options.size():
+		if options[i].is_plain() or options[i].is_negative_digit():
+			if not (options[i].value as String).is_valid_integer():
+				return {
+					"error": "un nombre est attendu"
+				}
+			if options[i].is_negative_digit():
+				numbers.append(int("-" + options[i].value))
+			else:
+				numbers.append(int(options[i].value))
+		elif options[i].is_flag():
+			if options[i].value == "t" or options[i].value == "s":
+				var flag: String = options[i].value
+				i += 1
+				if i >= options.size() or not options[i].is_word():
+					return {
+						"error": "une valeur est attendue après l'option '-" + flag + "'."
+					}
+				if flag == "t":
+					ending = options[i].value
+				else:
+					separator = options[i].value
+			else:
+				return {
+					"error": "l'option '" + options[i].value + "' est inconnue."
+				}
+		else:
+			return {
+				"error": "l'argument '" + str(options[i].value) + "' était inattendu."
+			}
+		i += 1
+	if numbers.size() == 3:
+		start = numbers[0]
+		step = numbers[1]
+		end = numbers[2]
+		if start > end and step > 0:
+			return {
+				"error": "la valeur du saut doit être négative."
+			}
+	elif numbers.size() == 2:
+		start = numbers[0]
+		end = numbers[1]
+	elif numbers.size() == 1:
+		start = 1
+		end = numbers[0]
+	else:
+		return {
+			"error": "un nombre indiquant la fin de la séquence est attendu."
+		}
+	step = 1 if start < end else -1
+	var output := ""
+	for c in range(start, end + (1 if step > 0 else -1), step): # we want to include "end"
+		output += str(c) + separator
+	output += ending
+	return {
+		"output": output,
+		"error": null
+	}

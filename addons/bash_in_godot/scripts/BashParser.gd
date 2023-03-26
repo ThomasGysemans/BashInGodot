@@ -127,6 +127,13 @@ func _read(input: String) -> Array:
 					else:
 						result.append(BashToken.new(Tokens.LONG_FLAG, flag_name))
 				else:
+					# We want -la to become two tokens: -l and -a
+					# We want -3 to be a token too,
+					# however we want -30 to be a PLAIN token
+					if (pos + 1) < length and (input[pos] + input[pos+1]).is_valid_integer():
+						result.append(BashToken.new(Tokens.PLAIN, "-" + input[pos] + input[pos+1]))
+						pos += 2
+						continue
 					result.append(BashToken.new(Tokens.FLAG, input[pos]))
 					pos += 1
 					while pos < length and input[pos] != " ":

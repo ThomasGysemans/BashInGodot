@@ -23,7 +23,8 @@ signal error_thrown (command, reason) # emitted when the `command` thrown an err
 signal permissions_changed (file) # file is a SystemElement (file or FOLDER)
 signal file_created (file) # file is a SystemElement (file or FOLDER)
 signal file_destroyed (file) # file is a SystemElement (file or FOLDER)
-signal file_read (file) # emitted when the file is being read (via the cat command). The `file` can either be a file or a folder.
+signal file_changed (file) # emitted when "nano" was used to edit the content of a file. It does not detect if the new content is different.
+signal file_read (file) # emitted when the file is being read (via the cat command).
 signal file_copied (origin, copy) # emitted when the `origin` is being copied. Note that `origin` != `copy` (not the same reference, and the absolute path of the copy, or its content, might be different from the origin's).
 signal file_moved (origin, target) # emitted when the `origin` is being moved elsewhere. The origin is destroyed (but `file_destroyed` is not emitted) and `target` is the new instance of SystemElement.
 signal directory_changed (target) # emitted when the `cd` command is used (and didn't throw an error)
@@ -33,12 +34,14 @@ signal help_asked (output) # emitted when the custom `help` command is used.
 signal variable_set (name, value, is_new) # emitted when a variable is created, "name" and "value" are strings, is_new is true if the variable was just created or false if it was modified.
 signal interface_cleared
 
+var nano_editor = null
+var edited_file = null
 var user_name := "vous" # the currently logged in user's name
 var group_name := "votre_groupe" # the currently logged in user's group name
 var error_handler := ErrorHandler.new() # this will be used in case specific erros happen deep into the logic
 var system: System # we'll start the terminal with an empty root by default
 var PWD := PathObject.new("/") # the absolute path we are currently on in the `system`
-var pid := 42 # the number of the current process
+var pid: int # the number of the current process
 # The `runtime` variable holds all the execution contexts.
 # Bash usually creates only global variables no matter where they've been initialised.
 # We are not taking into account the "local" keyword.
@@ -283,17 +286,43 @@ var COMMANDS := {
 				"chmod 007 file.txt"
 			]
 		}
+	},
+	"nano": {
+		"reference": funcref(self, "nano"),
+		"manual": {
+			"name": "nano - ouvre un éditeur pour éditer un fichier dans le terminal",
+			"synopsis": ["[b]nano[/b] [u]fichier[/u]"],
+			"description": "Nano est l'éditeur par défaut de Bash. Utilisez cette commande pour éditer un fichier déjà existant. Si le fichier cible n'existe pas il sera créé. La version de Nano proposée ici est modifiée pour convenir à une utilisation à la souris.",
+			"options": [],
+			"examples": [
+				"nano file.txt"
+			]
+		}
 	}
 }
 
 # Define a terminal with its unique PID.
 # Set what System the terminal has to be using.
-func _init(p: int, sys: System):
+# `editor` is the scene to use for file editing (it must be an instance of WindowPopup)
+# however `editor` is optional (null by default).
+func _init(p: int, sys: System, editor = null):
 	pid = p
 	system = sys
+	if editor != null and editor is WindowDialog:
+		set_editor(editor)
 	# just adding the list of available commands in the right page,
 	# because "COMMANDS" cannot be accessed in itself.
 	COMMANDS["help"].manual.description += " Voici une liste de toutes les commandes disponibles : " + ", ".join(COMMANDS.keys()) + "."
+
+func set_editor(editor: WindowDialog) -> void:
+	if nano_editor != null:
+		# If the editor is being changed,
+		# then we want to make sure that the old editor
+		# doesn't receive the signals anymore.
+		(nano_editor.get_node("Button") as Button).disconnect("pressed", self, "_on_nano_saved")
+	var save_button: Button = (editor as WindowDialog).get_node("Button")
+	save_button.connect("pressed", self, "_on_nano_saved")
+	nano_editor = editor
 
 func _write_to_redirection(redirection: Dictionary, output: String) -> void:
 	if redirection.type == Tokens.WRITING_REDIRECTION:
@@ -488,6 +517,7 @@ func build_manual_page_using(manual: Dictionary) -> String:
 			output += "\t" + example + "\n"
 	return output
 
+# Example:
 # When we have redirections,
 # if the file doesn't exist on the standard output,
 # then we must create it.
@@ -1279,3 +1309,44 @@ func chmod(options: Array, _standard_input: String) -> Dictionary:
 		"output": "",
 		"error": null
 	}
+
+func nano(options: Array, _standard_input: String) -> Dictionary:
+	if nano_editor == null:
+		return {
+			"error": "ce terminal n'a pas été configuré avec un éditeur !"
+		}
+	if options.size() != 1 or not options[0].is_word():
+		return {
+			"error": "le nom du fichier est attendu (uniquement)"
+		}
+	var path := PathObject.new(options[0].value)
+	if not path.is_valid:
+		return {
+			"error": "le chemin n'est pas valide"
+		}
+	var element = get_file_or_make_it(path) # nano can also create a file
+	if error_handler.has_error:
+		return {
+			"error": error_handler.clear()
+		}
+	if element.is_folder():
+		return {
+			"error": "ne peut ouvrir que des fichiers"
+		}
+	if not element.can_read() or not element.can_write():
+		return {
+			"error": "permission refusée"
+		}
+	edited_file = element
+	nano_editor.popup()
+	return {
+		"output": "",
+		"error": null
+	}
+
+func _on_nano_saved() -> void:
+	var textarea: TextEdit = (nano_editor as WindowDialog).get_node("TextEdit")
+	edited_file.content = textarea.text
+	emit_signal("file_changed", edited_file)
+	(nano_editor as WindowDialog).hide()
+	edited_file = null

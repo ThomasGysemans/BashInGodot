@@ -10,8 +10,9 @@ export(int) var pid = -1
 
 onready var interface: RichTextLabel = preload("res://addons/bash_in_godot/scenes/Interface.tscn").instance(); # the terminal
 onready var prompt: LineEdit = preload("res://addons/bash_in_godot/scenes/Prompt.tscn").instance(); # the input
+onready var editor: WindowDialog = preload("res://addons/bash_in_godot/scenes/NanoEditor.tscn").instance(); # "nano"
 
-var terminal := Terminal.new(pid, System.new([]))
+var terminal: Terminal
 var history := [] # array of strings containing all previous entered commands
 var history_index := 0 # the position in the history. By default, it will have the size of the history array as value
 
@@ -22,16 +23,16 @@ func set_system(system_reference: System) -> void:
 func _ready():
 	if pid < 0:
 		pid = randi()%10000+1
-	terminal.pid = pid
-	terminal.user_name = user_name
-	terminal.group_name = group_name
 	var node := get_node_or_null(system_reference_node)
+	var system := System.new([])
 	if node != null and "system" in node:
-		terminal.system = node.system
+		system = node.system
+	terminal = Terminal.new(pid, system, editor)
 	add_child(interface)
 	add_child(prompt)
-	prompt.connect("text_entered", self, "_on_command_entered")
+	add_child(editor)
 	theme = preload("res://addons/bash_in_godot/resources/terminal.tres")
+	prompt.connect("text_entered", self, "_on_command_entered")
 	if user_name != null:
 		terminal.user_name = user_name
 	if group_name != null:

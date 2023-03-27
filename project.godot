@@ -84,6 +84,11 @@ _global_script_classes=[ {
 "language": "GDScript",
 "path": "res://addons/gdUnit3/src/Comparator.gd"
 }, {
+"base": "Object",
+"class": "DNS",
+"language": "GDScript",
+"path": "res://addons/bash_in_godot/scripts/DNS.gd"
+}, {
 "base": "ValueProvider",
 "class": "DefaultValueProvider",
 "language": "GDScript",
@@ -765,6 +770,7 @@ _global_script_class_icons={
 "CmdOption": "",
 "CmdOptions": "",
 "Comparator": "",
+"DNS": "",
 "DefaultValueProvider": "",
 "EqualsArgumentMatcher": "",
 "ErrorHandler": "",

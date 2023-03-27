@@ -43,6 +43,8 @@ var error_handler := ErrorHandler.new() # this will be used in case specific err
 var system: System # we'll start the terminal with an empty root by default
 var PWD := PathObject.new("/") # the absolute path we are currently on in the `system`
 var pid: int # the number of the current process
+var dns := DNS.new([])
+var ip_address := ""
 # The `runtime` variable holds all the execution contexts.
 # Bash usually creates only global variables no matter where they've been initialised.
 # We are not taking into account the "local" keyword.
@@ -323,6 +325,19 @@ var COMMANDS := {
 				"seq -t 'LANCEMENT' 10 0"
 			]
 		}
+	},
+	"ping": {
+		"reference": funcref(self, "ping"),
+		"manual": {
+			"name": "ping - établis une connexion simple à une autre adresse.",
+			"synopsis": ["[b]ping[/b] [u]adresse[/u]"],
+			"description": "Des paquets très simples sont envoyés à l'adresse cible. La cible peut être une adresse IP ou l'URL directement. Si une URL est précisée, alors la commande ira chercher dans le serveur DNS le plus proche l'adresse IP de la destination.",
+			"options": [],
+			"examples": [
+				"ping example.com",
+				"ping 192.168.10.1"
+			]
+		}
 	}
 }
 
@@ -348,6 +363,18 @@ func set_editor(editor: WindowDialog) -> void:
 	var save_button: Button = (editor as WindowDialog).get_node("Button")
 	save_button.connect("pressed", self, "_on_nano_saved")
 	nano_editor = editor
+
+func set_dns(d: DNS) -> void:
+	dns = d
+
+# Configures the IP address of the terminal.
+# It will be used when using the `ping` command.
+# Returns false if the given ip is not valid.
+func set_ip_address(ip: String) -> bool:
+	if ip.is_valid_ip_address():
+		ip_address = ip
+		return true
+	return false
 
 func _write_to_redirection(redirection: Dictionary, output: String) -> void:
 	if redirection.type == Tokens.WRITING_REDIRECTION:
@@ -1537,3 +1564,53 @@ func seq(options: Array, _standard_input: String) -> Dictionary:
 		"output": output,
 		"error": null
 	}
+
+func ping(options: Array, _standard_input: String) -> Dictionary:
+	if self.ip_address.empty():
+		return {
+			"error": "une adresse IP n'a pas été configurée."
+		}
+	if dns.config.empty():
+		return {
+			"error": "la configuration DNS est vide."
+		}
+	if options.size() != 1:
+		return {
+			"error": "argument inattendu."
+		}
+	var property = null
+	if DNS.is_valid_domain(options[0].value): property = "name"
+	if DNS.is_valid_mac_address(options[0].value): property = "mac"
+	if DNS.is_valid_ipv4(options[0].value): property = "ipv4"
+	if DNS.is_valid_ipv6(options[0].value): property = "ipv6"
+	if property == null:
+		return {
+			"error": "cible invalide"
+		}
+	var entry = dns.get_entry(options[0].value, property)
+	if entry == null:
+		return {
+			"error": "la destination n'existe pas, ou n'a pas été trouvée"
+		}
+	var destination_ip = entry.ipv6 if property == "ipv6" else entry.ipv4
+	var output = "PING " + entry.name + " (" + destination_ip + "): 56 octets de données\n"
+	var rng := RandomNumberGenerator.new()
+	var times := []
+	for i in range(0, 5):
+		rng.randomize()
+		var time = rng.randf_range(20.0, 30.0)
+		times.append(time)
+		output += "64 octets depuis " + destination_ip + ": icmp_seq=0 ttl=55 temps=" + ("%.3f" % time) + " ms\n"
+	output += "--- " + entry.name + " statistiques du ping ---\n"
+	output += "5 paquets transmis, 5 paquets reçus, 0.0% de perte\n"
+	output += "round-trip min/avg/max/stddev = " + ("%.3f" % times.min()) + "/" + ("%.3f" % _avg(times)) + "/" + ("%.3f" % times.max()) + "/0.000 ms"
+	return {
+		"output": output,
+		"error": null
+	}
+
+func _avg(array: Array) -> float:
+	var s := 0.0
+	for value in array:
+		s += value
+	return s / array.size()

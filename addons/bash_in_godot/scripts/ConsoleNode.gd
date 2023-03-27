@@ -6,6 +6,7 @@ const INIT_TEXT = "Terminal M100 1.0.\nLe terminal fait maison [b]simplifié[/b]
 export(String) var user_name
 export(String) var group_name
 export(NodePath) var system_reference_node
+export(String) var ip_address = ""
 export(int) var pid = -1
 
 onready var interface: RichTextLabel = preload("res://addons/bash_in_godot/scenes/Interface.tscn").instance(); # the terminal
@@ -13,6 +14,7 @@ onready var prompt: LineEdit = preload("res://addons/bash_in_godot/scenes/Prompt
 onready var editor: WindowDialog = preload("res://addons/bash_in_godot/scenes/NanoEditor.tscn").instance(); # "nano"
 
 var terminal: Terminal
+var dns_config := DNS.new([])
 var history := [] # array of strings containing all previous entered commands
 var history_index := 0 # the position in the history. By default, it will have the size of the history array as value
 
@@ -25,9 +27,18 @@ func _ready():
 		pid = randi()%10000+1
 	var node := get_node_or_null(system_reference_node)
 	var system := System.new([])
-	if node != null and "system" in node:
-		system = node.system
+	if node != null:
+		if "system" in node:
+			system = node.system
+		if "dns" in node:
+			dns_config = node.dns
+		# if an ip address is defined here using the export, the one from the node is ignored
+		if "ip_address" in node and not ip_address.empty():
+			ip_address = node.ip_address
 	terminal = Terminal.new(pid, system, editor)
+	terminal.set_dns(dns_config)
+	if not ip_address.empty():
+		terminal.set_ip_address(ip_address)
 	add_child(interface)
 	add_child(prompt)
 	add_child(editor)

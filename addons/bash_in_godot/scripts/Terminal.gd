@@ -102,8 +102,8 @@ var COMMANDS := {
 		"manual": {
 			"name": "tr - remplace, ou supprime, un pattern précis depuis l'entrée standard pour l'afficher dans la sortie standard.",
 			"synopsis": [
-				"[b]tr[/b] [b]-d[/b] [u]pattern[/u]",
-				"[b]tr[/b] [u]pattern[/u] [u]remplacement[/u]"
+				"[b]tr[/b] [u]pattern[/u] [u]remplacement[/u]",
+				"[b]tr[/b] [b]-d[/b] [u]pattern[/u]"
 			],
 			"description": "Remplace le pattern par la chaine de remplacement donné. Si l'option -d est précisée, toutes les occurrences du pattern seront supprimées. Le résultat est affiché dans la sortie standard.",
 			"options": [
@@ -133,7 +133,7 @@ var COMMANDS := {
 	"ls": {
 		"reference": funcref(self, "ls"),
 		"manual": {
-			"name": "ls - liste le contenu d'un dossier",
+			"name": "ls - liste le contenu d'un dossier.",
 			"synopsis": ["[b]ls[/b] [[b]-a[/b]] [[u]dossier[/u]]"],
 			"description": "La commande va lister le contenu des dossiers, en colorant en vert les dossiers, et en blanc les fichiers. Par défaut, les fichiers et dossiers cachés (c'est-à-dire ceux préfixés par un point) ne serront pas affichés. Pour les afficher, utilisez l'option -a.",
 			"options": [
@@ -161,7 +161,7 @@ var COMMANDS := {
 	"pwd": {
 		"reference": funcref(self, "pwd"),
 		"manual": {
-			"name": "pwd - retourne le chemin absolu du dossier courant",
+			"name": "pwd - retourne le chemin absolu du dossier courant.",
 			"synopsis": ["[b]pwd[/b]"],
 			"description": "La commande pwd écrit dans la sortie standard le chemin absolu du dossier courant. Naviguez dans les dossiers en utilisant la commande \"cd\".",
 			"options": [],
@@ -232,7 +232,7 @@ var COMMANDS := {
 		"reference": funcref(self, "cp"),
 		"manual": {
 			"name": "cp - copie un élément vers une aute destination.",
-			"synopsis": ["[b]rm[/b] [u]origine[/u] [u]destination[/u]"],
+			"synopsis": ["[b]cp[/b] [u]origine[/u] [u]destination[/u]"],
 			"options": [],
 			"description": "Réalise la copie de l'élément d'origine vers la nouvelle destination. La copie devient indépendante de l'originale. Si une copie d'un dossier vers un autre dossier est réalisée, et que cet autre dossier contient des fichiers de même nom que le premier, alors ces fichiers seront remplacés, leur contenu ainsi perdu.",
 			"examples": [
@@ -279,7 +279,7 @@ var COMMANDS := {
 	"chmod": {
 		"reference": funcref(self, "chmod"),
 		"manual": {
-			"name": "chmod - définis les permissions accordées à un élément",
+			"name": "chmod - définis les permissions accordées à un élément.",
 			"synopsis": ["[b]chmod[/b] [u]mode[/u] [u]fichier[/u]"],
 			"description": "Il y a trois catégories (utilisateur, groupe, autres) qui ont chacune trois type d'autorisations : lecture (r), écriture (w), exécution/franchissement (x). Les permissions s'écrivent \"-rwx--xr--\" où le premier caractère est soit \"d\" pour un dossier, ou \"-\" pour un fichier et où l'utilisateur a les droits combinés \"rwx\" (lecture, écriture et exécution) et où le groupe a les droits d'exécution seulement et les autres le droit de lecture uniquement. En règle générale, les permissions sont données sous la forme de trois chiffres en octal dont la somme est une combinaison unique : 4 pour la lecture, 2 pour l'écriture et 1 pour l'exécution. Par défaut un fichier, à sa création, a les droits 644. Accordez ou retirez un droit spécifique avec \"chmod u+x file.txt\" (raccourcie en \"chmod +x file.txt\" quand il s'agit de l'utilisateur, ([b]u[/b] pour utilisateur, [b]g[/b] pour groupe, [b]o[/b] pour autres)), ou détaillez la règle en octal à appliquer sur les trois catégories (\"chmod 657 file.txt\").",
 			"options": [],
@@ -792,19 +792,33 @@ func man(options: Array, _standard_input: String) -> Dictionary:
 		"error": null
 	}
 
-# todo: list the possible commannds and explain `man`
 func help(options: Array, _standard_input: String) -> Dictionary:
 	if options.size() > 0:
 		return {
 			"error": "aucun argument n'est attendu"
 		}
-	var manual = COMMANDS["help"].manual
-	var page := build_manual_page_using(manual)
-	emit_signal("help_asked", page)
+	var output := "Ce terminal vous permet d'écrire des commandes Bash simplifiées.\nLe but est pédagogique. Vous pouvez apprendre des commandes et vous entrainer.\nLes commandes ont été reproduites le plus fidèlement possible, mais quelques différences peuvent apparaître.\n\nRappels sur comment écrire une commande :\nUne commande vous permet de manipuler les fichiers et dossiers de votre environnement de travail.\nEn règle générale, la syntaxe pour une commande ressemble à ça : [b]nom_de_la_commande[/b] [...[b]options[/b]] [...[b]arguments[/b]].\n\nUtilisez des redirections pour modifier le comportement d'une commande. Une redirection est un numéro : \n- 0 : entrée standard\n- 1 : sortie standard\n- 2 : sortie d'erreur\nExemple : head file.txt 1>resultat.txt (réécris, ou crée, le fichier \"resultat.txt\" avec le résultat écrit de la commande).\nUtilisez les symboles :\n- > : réécris le fichier\n- < : lis le fichier\n- >> : ajoute au fichier\n\nEnchainez des commandes sur la même ligne en les séparant par un \"|\" (\"pipe\" en anglais).\nL'entrée standard de la commande suivante sera le résultat écrit de la commande précédente.\nExemple : echo yoyo | cat\n\n"
+	var max_synopsis_size := 40
+	var max_description_size := 60
+	for command in COMMANDS:
+		var synopsis = replace_bbcode(COMMANDS[command].manual.synopsis[0], "")
+		var description = replace_bbcode(COMMANDS[command].manual.name, "")
+		var space = max_synopsis_size - synopsis.length()
+		description = description.right(description.find("-"))
+		output += synopsis.left(max_synopsis_size) + (" ".repeat(space + 3) if synopsis.length() < max_synopsis_size else "") + ("..." if synopsis.length() > max_synopsis_size else "") + " " + description.left(max_description_size) + ("..." if description.length() > max_description_size else "") + "\n"
 	return {
-		"output": page,
+		"output": output,
 		"error": null
 	}
+
+func replace_bbcode(text: String, replacement: String) -> String:
+	var regex := RegEx.new()
+	regex.compile("\\[\\/?(?:b|i|u|s|left|center|right|quote|code|list|img|spoil|color).*?\\]")
+	var search := regex.search_all(text)
+	var result := text
+	for r in search:
+		result = result.replace(r.get_string(), replacement)
+	return result
 
 func echo(options: Array, _standard_input: String) -> Dictionary:
 	var to_display := ""

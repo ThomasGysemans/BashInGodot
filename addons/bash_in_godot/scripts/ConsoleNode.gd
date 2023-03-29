@@ -49,6 +49,7 @@ func _ready():
 	if group_name != null:
 		terminal.group_name = group_name
 	interface.append_bbcode(INIT_TEXT)
+#	interface.get("custom_fonts/normal_font").size = 8
 
 func _process(_delta):
 	if Input.is_action_just_pressed("ui_up") and history_index > 0:

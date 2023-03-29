@@ -338,6 +338,44 @@ var COMMANDS := {
 				"ping 192.168.10.1"
 			]
 		}
+	},
+	"head": {
+		"reference": funcref(self, "head"),
+		"manual": {
+			"name": "head - affiche les premières lignes d'un fichier.",
+			"synopsis": ["[b]head[/b] [[b]-n[/b] [u]nombre[/u]] [[u]fichier[/u]]"],
+			"description": "Par défaut, les 10 premières lignes du fichier sont affichées. Précisez le nombre de lignes désirées avec l'option -n.",
+			"options": [
+				{
+					"name": "n",
+					"description": "Précise le nombre de lignes voulues."
+				}
+			],
+			"examples": [
+				"head file.txt",
+				"head -n 1 file.txt",
+				"cat file.txt | head"
+			]
+		}
+	},
+	"tail": {
+		"reference": funcref(self, "tail"),
+		"manual": {
+			"name": "tail - affiche les dernières lignes d'un fichier.",
+			"synopsis": ["[b]tail[/b] [[b]-n[/b] [u]nombre[/u]] [[u]fichier[/u]]"],
+			"description": "Par défaut, les 10 dernières lignes du fichier sont affichées. Précisez le nombre de lignes désirées avec l'option -n.",
+			"options": [
+				{
+					"name": "n",
+					"description": "Précise le nombre de lignes voulues."
+				}
+			],
+			"examples": [
+				"tail file.txt",
+				"tail -n 1 file.txt",
+				"cat file.txt | tail"
+			]
+		}
 	}
 }
 
@@ -1614,3 +1652,91 @@ func _avg(array: Array) -> float:
 	for value in array:
 		s += value
 	return s / array.size()
+
+func _handle_head_or_tail_command(options: Array, standard_input) -> Dictionary:
+	var text = null
+	var n := 10
+	var i := 0
+	while i < options.size():
+		if options[i].is_flag():
+			if options[i].value == "n":
+				i += 1
+				if i >= options.size() or not options[i].is_plain():
+					return {
+						"error": "l'option -n attend une valeur."
+					}
+				if not options[i].value.is_valid_integer():
+					return {
+						"error": "la valeur de l'option -n n'est pas valide."
+					}
+				n = int(options[i].value)
+				if n <= 0:
+					return {
+						"error": "la valeur de -n doit être strictement positive."
+					}
+			else:
+				return {
+					"error": "l'option '-" + options[i].value + "' est inconnue."
+				}
+		elif options[i].is_word():
+			var path := PathObject.new(options[i].value)
+			if not path.is_valid:
+				return {
+					"error": "le chemin n'est pas valide."
+				}
+			var element = get_file_element_at(path)
+			if element == null:
+				return {
+					"error": _display_error_or("le fichier n'existe pas")
+				}
+			if not element.can_read():
+				return {
+					"error": "permission refusée"
+				}
+			if not element.is_file():
+				return {
+					"error": "la cible n'est pas un fichier"
+				}
+			text = element.content
+		else:
+			return {
+				"error": "syntaxe invalide"
+			}
+		i += 1
+	if text == null:
+		text = standard_input
+	return {
+		"n": n,
+		"text": text,
+		"error": null
+	}
+
+func head(options: Array, standard_input: String) -> Dictionary:
+	var check := _handle_head_or_tail_command(options, standard_input)
+	if check.error != null:
+		return {
+			"error": check.error
+		}
+	var output := ""
+	var lines = check.text.split("\n")
+	for e in range(0, min(check.n, lines.size())):
+		output += lines[e] + "\n"
+	return {
+		"output": output,
+		"error": null
+	}
+
+func tail(options: Array, standard_input: String) -> Dictionary:
+	var check := _handle_head_or_tail_command(options, standard_input)
+	if check.error != null:
+		return {
+			"error": check.error
+		}
+	var output := ""
+	var lines = check.text.split("\n")
+	for e in range(max(lines.size() - check.n, 0), lines.size()):
+		output += lines[e] + "\n"
+	return {
+		"output": output,
+		"error": null
+	}

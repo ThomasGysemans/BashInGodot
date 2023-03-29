@@ -9,6 +9,7 @@ export(NodePath) var system_reference_node
 export(String) var ip_address = ""
 export(int) var pid = -1
 export(int) var max_paragraph_size = -1
+export(float) var default_font_size = 14
 
 onready var interface: RichTextLabel = preload("res://addons/bash_in_godot/scenes/Interface.tscn").instance(); # the terminal
 onready var prompt: LineEdit = preload("res://addons/bash_in_godot/scenes/Prompt.tscn").instance(); # the input
@@ -58,7 +59,7 @@ func _ready():
 	if group_name != null:
 		terminal.group_name = group_name
 	interface.append_bbcode(INIT_TEXT)
-#	interface.get("custom_fonts/normal_font").size = 8
+	set_font_size(default_font_size)
 
 func _process(_delta):
 	if Input.is_action_just_pressed("ui_up") and history_index > 0:
@@ -133,3 +134,7 @@ func _print_command(command: String):
 
 func _print_error(description: String):
 	interface.append_bbcode("[color=red]" + description + "[/color]\n")
+
+func set_font_size(size: int) -> void:
+	interface.get("custom_fonts/normal_font").size = size
+	interface.get("custom_fonts/bold_font").size = size

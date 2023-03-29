@@ -8,6 +8,7 @@ export(String) var group_name
 export(NodePath) var system_reference_node
 export(String) var ip_address = ""
 export(int) var pid = -1
+export(int) var max_paragraph_size = -1
 
 onready var interface: RichTextLabel = preload("res://addons/bash_in_godot/scenes/Interface.tscn").instance(); # the terminal
 onready var prompt: LineEdit = preload("res://addons/bash_in_godot/scenes/Prompt.tscn").instance(); # the input
@@ -24,7 +25,9 @@ func set_system(system_reference: System) -> void:
 
 func _ready():
 	if pid < 0:
-		pid = randi()%10000+1
+		var rng = RandomNumberGenerator.new()
+		rng.randomize()
+		pid = rng.randi_range(1000, 10000)
 	var node := get_node_or_null(system_reference_node)
 	var system := System.new([])
 	if node != null:
@@ -35,8 +38,14 @@ func _ready():
 		# if an ip address is defined here using the export, the one from the node is ignored
 		if "ip_address" in node and not ip_address.empty():
 			ip_address = node.ip_address
+		# if a max paragraph size is defined using the export variable, it will override the one defined in the node.
+		# If none are given, nor valid, then the default one from the Terminal scene is used.
+		if "max_paragraph_size" in node and max_paragraph_size == -1:
+			max_paragraph_size = node.max_paragraph_size
 	terminal = Terminal.new(pid, system, editor)
 	terminal.set_dns(dns_config)
+	if max_paragraph_size > 0:
+		terminal.set_custom_text_width(max_paragraph_size)
 	if not ip_address.empty():
 		terminal.set_ip_address(ip_address)
 	add_child(interface)

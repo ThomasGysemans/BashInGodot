@@ -35,6 +35,7 @@ signal variable_set (name, value, is_new) # emitted when a variable is created, 
 signal script_executed (script, output) # emitted when a script was executed. `script` is the instance of SystemElement of the script, `output` is the complete output printed in the interface/
 signal interface_cleared
 
+var max_paragraph_width := 50
 var nano_editor = null
 var edited_file = null
 var user_name := "vous" # the currently logged in user's name
@@ -405,6 +406,9 @@ func set_editor(editor: WindowDialog) -> void:
 func set_dns(d: DNS) -> void:
 	dns = d
 
+func set_custom_text_width(max_char: int) -> void:
+	max_paragraph_width = max_char
+
 # Configures the IP address of the terminal.
 # It will be used when using the `ping` command.
 # Returns false if the given ip is not valid.
@@ -684,7 +688,7 @@ func build_manual_page_using(manual: Dictionary) -> String:
 	for synopsis in manual.synopsis:
 		output += "\t" + synopsis
 	output += "\n\n[b]DESCRIPTION[/b]\n"
-	var description_lines := _cut_paragraph(manual.description, 50)
+	var description_lines := _cut_paragraph(manual.description, max_paragraph_width)
 	for line in description_lines:
 		output += "\t" + line + "\n"
 	if not manual.options.empty():

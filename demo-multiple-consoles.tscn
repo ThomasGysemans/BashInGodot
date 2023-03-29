@@ -16,6 +16,7 @@ script = ExtResource( 2 )
 user_name = "thomas"
 group_name = "bogoss"
 system_reference_node = NodePath("../Node2D")
+max_paragraph_size = 10
 
 [node name="Console2" type="Panel" parent="."]
 margin_left = 670.0

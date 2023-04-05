@@ -630,6 +630,11 @@ _global_script_classes=[ {
 "path": "res://addons/gdUnit3/src/core/LocalTime.gd"
 }, {
 "base": "Object",
+"class": "M99",
+"language": "GDScript",
+"path": "res://addons/bash_in_godot/scripts/M99.gd"
+}, {
+"base": "Object",
 "class": "PathObject",
 "language": "GDScript",
 "path": "res://addons/bash_in_godot/scripts/Path.gd"
@@ -879,6 +884,7 @@ _global_script_class_icons={
 "IntFuzzer": "",
 "JUnitXmlReport": "",
 "LocalTime": "",
+"M99": "",
 "PathObject": "",
 "RPC": "",
 "RPCClientConnect": "",

@@ -30,11 +30,12 @@ signal file_moved (origin, target) # emitted when the `origin` is being moved el
 signal directory_changed (target) # emitted when the `cd` command is used (and didn't throw an error)
 signal interface_changed (content) # emitted when something is printed onto the screen. It is not emitted when the interface is cleared.
 signal manual_asked (command_name, output) # emitted when the `man` command is used to open the manual page of a command.
-signal help_asked (output) # emitted when the custom `help` command is used.
 signal variable_set (name, value, is_new) # emitted when a variable is created, "name" and "value" are strings, is_new is true if the variable was just created or false if it was modified.
 signal script_executed (script, output) # emitted when a script was executed. `script` is the instance of SystemElement of the script, `output` is the complete output printed in the interface/
+signal help_asked # emitted when the custom `help` command is used.
 signal interface_cleared
 
+var interface_reference = null # RichTextLabel
 var max_paragraph_width := 50
 var nano_editor = null
 var edited_file = null
@@ -52,6 +53,7 @@ var ip_address := ""
 # The first index of this array will be the global context.
 # For now, we'll only have one context.
 var runtime := [BashContext.new()]
+var m99 := M99.new()
 
 func _display_error_or(error: String):
 	return error_handler.clear() if error_handler.has_error else error
@@ -259,9 +261,9 @@ var COMMANDS := {
 	"help": {
 		"reference": funcref(self, "help"),
 		"manual": {
-			"name": "help - commande custom si vous avez besoin d'aide quant à Bash.",
+			"name": "help - commande si vous avez besoin d'aide quant à Bash.",
 			"synopsis": ["[b]help[/b]"],
-			"description": "Le terminal vous permet d'exécuter des commandes de manière à manipuler les fichiers et dossiers de votre système. Une commande s'écrit généralement de la manière suivant : \"nom ...options ...arguments\". Chaque commande a ses spécificités. Pour en savoir plus sur une commande en particulier tapez : \"man nom_de_la_commande\", ce qui vous affichera la page du manuel correspondant à cette commande.",
+			"description": "Utilisez cette commande si vous avez besoin de rappel quant au fonctionnement primaire de Bash. La commande vous propose également une liste de toutes les commandes disponibles, avec une rapide description de chacune.",
 			"options": [],
 			"examples": []
 		}
@@ -377,8 +379,76 @@ var COMMANDS := {
 				"cat file.txt | tail"
 			]
 		}
+	},
+	"startm99": {
+		"reference": funcref(self, "startm99"),
+		"manual": {
+			"name": "startm99 - commande custom pour démarrer un simulateur de langage Assembler appelé M99.",
+			"synopsis": ["[b]startm99[/b]"],
+			"description": "Démarre un simulateur pédadogique pour apprendre les bases d'un langage Assembler.",
+			"options": [],
+			"examples": []
+		}
 	}
 }
+
+static func replace_bbcode(text: String, replacement: String) -> String:
+	var regex := RegEx.new()
+	regex.compile("\\[\\/?(?:b|i|u|s|left|center|right|quote|code|list|img|spoil|color).*?\\]")
+	var search := regex.search_all(text)
+	var result := text
+	for r in search:
+		result = result.replace(r.get_string(), replacement)
+	return result
+
+static func cut_paragraph(paragraph: String, line_length: int) -> Array:
+	if paragraph.length() <= line_length:
+		return [paragraph]
+	var lines := []
+	var i := 0
+	var pos := 0
+	while i < (paragraph.length() / line_length):
+		var e := 0
+		while (pos+line_length+e) < paragraph.length() and paragraph[pos+line_length+e] != " ":
+			e += 1
+		lines.append(paragraph.substr(pos, line_length + e).strip_edges())
+		pos += line_length + e
+		i += 1
+	lines.append(paragraph.substr(pos).strip_edges())
+	return lines
+
+static func build_manual_page_using(manual: Dictionary, max_size: int) -> String:
+	var output := ""
+	output += "[b]NOM[/b]\n\t" + manual.name + "\n\n"
+	output += "[b]SYNOPSIS[/b]\n"
+	for synopsis in manual.synopsis:
+		output += "\t" + synopsis
+	output += "\n\n[b]DESCRIPTION[/b]\n"
+	var description_lines := cut_paragraph(manual.description, max_size)
+	for line in description_lines:
+		output += "\t" + line + "\n"
+	if not manual.options.empty():
+		output += "[b]OPTIONS[/b]\n"
+		for option in manual.options:
+			output += "\t[b]" + option.name + "[/b]\n"
+			output += "\t\t" + option.description + "\n"
+	if not manual.examples.empty():
+		output += "\n[b]EXEMPLES[/b]\n"
+		for example in manual.examples:
+			output += "\t" + example + "\n"
+	return output
+
+static func build_help_page(text: String, commands: Dictionary) -> String:
+	var output := text + "\n\n"
+	var max_synopsis_size := 40
+	var max_description_size := 60
+	for command in commands:
+		var synopsis = replace_bbcode(commands[command].manual.synopsis[0], "")
+		var description = replace_bbcode(commands[command].manual.name, "")
+		var space = max_synopsis_size - synopsis.length()
+		description = description.right(description.find("-"))
+		output += synopsis.left(max_synopsis_size) + (" ".repeat(space + 3) if synopsis.length() < max_synopsis_size else "") + ("..." if synopsis.length() > max_synopsis_size else "") + " " + description.left(max_description_size) + ("..." if description.length() > max_description_size else "") + "\n"
+	return output
 
 # Define a terminal with its unique PID.
 # Set what System the terminal has to be using.
@@ -389,9 +459,6 @@ func _init(p: int, sys: System, editor = null):
 	system = sys
 	if editor != null and editor is WindowDialog:
 		set_editor(editor)
-	# just adding the list of available commands in the right page,
-	# because "COMMANDS" cannot be accessed in itself.
-	COMMANDS["help"].manual.description += " Voici une liste de toutes les commandes disponibles : " + ", ".join(COMMANDS.keys()) + "."
 
 func set_editor(editor: WindowDialog) -> void:
 	if nano_editor != null:
@@ -405,6 +472,9 @@ func set_editor(editor: WindowDialog) -> void:
 
 func set_dns(d: DNS) -> void:
 	dns = d
+
+func use_interface(interface: RichTextLabel) -> void:
+	interface_reference = interface
 
 func set_custom_text_width(max_char: int) -> void:
 	max_paragraph_width = max_char
@@ -424,7 +494,15 @@ func _write_to_redirection(redirection: Dictionary, output: String) -> void:
 	elif redirection.type == Tokens.APPEND_WRITING_REDIRECTION:
 		redirection.target.content += output
 
+func _save_interface(interface: RichTextLabel):
+	if interface == null:
+		interface = interface_reference # if no interface is given to this function, then use the previous one
+	else:
+		interface_reference = interface # if an interface is given, then save it, it's useful for the M99
+	return interface
+
 func execute(input: String, interface: RichTextLabel = null) -> Dictionary:
+	interface = _save_interface(interface)
 	var parser := BashParser.new(input, pid)
 	if not parser.error.empty():
 		return {
@@ -439,6 +517,12 @@ func execute(input: String, interface: RichTextLabel = null) -> Dictionary:
 	var cleared := false
 	for command in parsing:
 		if command.type == "command":
+			if m99.started:
+				if not command.redirections.empty():
+					return {
+						"error": "m99 n'accepte aucune redirection."
+					}
+				return execute_m99_command(command.name, command.options, interface)
 			var function = COMMANDS[command.name] if command.name in COMMANDS else null
 			if function == null and command.name.find('/') != -1:
 				var path_to_executable := PathObject.new(command.name)
@@ -487,6 +571,7 @@ func execute(input: String, interface: RichTextLabel = null) -> Dictionary:
 							command_redirections[2].target.content += "Commande '" + command.name + "' : " + result.error
 						return {
 							"output": "",
+							"interface_cleard": false,
 							"error": null
 						} # if there is an error, we have to stop the program anyway
 				if result.error != null:
@@ -496,6 +581,12 @@ func execute(input: String, interface: RichTextLabel = null) -> Dictionary:
 					}
 				else:
 					emit_signal("command_executed", command, result.output)
+					if m99.started:
+						if interface != null:
+							interface.text = ""
+						cleared = true
+						standard_input = result.output
+						break
 					if command_redirections[0] != null:
 						# Even though it doesn't make any sense to try to write something
 						# to the standard input, Bash overwrites the content of the target anyway.
@@ -512,13 +603,11 @@ func execute(input: String, interface: RichTextLabel = null) -> Dictionary:
 						cleared = true
 						if interface != null:
 							emit_signal("interface_cleared")
-							interface.text = ""
 		else: # the line is a variable affectation
 			var is_new = runtime[0].set_variable(command.name, command.value) # command.value is a BashToken
 			emit_signal("variable_set", command.name, command.value.value, is_new)
 	if interface != null and not standard_input.empty():
 		emit_signal("interface_changed", standard_input)
-		interface.append_bbcode(standard_input)
 	return {
 		"output": standard_input,
 		"interface_cleared": cleared,
@@ -531,8 +620,10 @@ func execute(input: String, interface: RichTextLabel = null) -> Dictionary:
 # Also, because there is no functions in our Bash,
 # we don't interpret the arguments (`options`) given to the command.
 func execute_file(file: SystemElement, options: Array, redirections: Array, interface: RichTextLabel = null) -> Dictionary:
+	_save_interface(interface)
 	var lines = file.content.split("\n")
 	var output := "" # the output will be the list of the output of each line
+	var cleared := false
 	for line in lines:
 		if line.begins_with("#"): # ignore comments (line starting with '#')
 			continue
@@ -549,6 +640,7 @@ func execute_file(file: SystemElement, options: Array, redirections: Array, inte
 						redirections[2].target.content += result.error
 					return {
 						"output": "",
+						"interface_cleared": false,
 						"error": null
 					}
 			if result.error != null:
@@ -557,11 +649,11 @@ func execute_file(file: SystemElement, options: Array, redirections: Array, inte
 				}
 			else:
 				output += result.output
-				if interface != null and result.interface_cleared:
-					interface.text = ""
+				if result.interface_cleared:
+					cleared = true
 					output = "" # reset the output
 	# The redirections must be treated after the end of the script,
-	# except for the port number 2 because it has to stop the execution.
+	# except for the port number 2 because it has to stop the execution
 	if redirections[0] != null:
 		_write_to_redirection(redirections[0], "") # the weird behaviour described above, in `execute()`
 	if redirections[1] != null:
@@ -569,26 +661,73 @@ func execute_file(file: SystemElement, options: Array, redirections: Array, inte
 		# then it will receive the content of the combined outputs
 		_write_to_redirection(redirections[1], output)
 		emit_signal("script_executed", file, output)
-		output = "" # the command (the execution of the script itself) won't output anything, just like any other command
+		output = "" # the command (the execution of the script itself) won't output anything
 	elif interface != null and not output.empty():
-		interface.append_bbcode(output)
 		emit_signal("script_executed", file, output)
 	return {
-		"output": output, # Do not use it to display content on the interface because it would be duplicated. `execute` already prints on the interface, unless you set `interface` to null.
+		"output": output,
+		"interface_cleared": cleared,
 		"error": null
 	}
- 
+
+# Custom commands when using M99.
+# Exemple is : set 090 401
+# meaning set cell at pos 090 with value 401
+func execute_m99_command(command_name: String, options: Array, interface: RichTextLabel = null) -> Dictionary:
+	_save_interface(interface)
+	if command_name == "man":
+		var manual = man(options, "")
+		if manual.error != null:
+			return manual
+		else:
+			return {
+				"output": "Le manuel a été ouvert.\nTapez la commande \"show\" pour en sortir.\n\n" + manual.output,
+				"error": null,
+				"interface_cleared": true
+			}
+	elif command_name == "help":
+		return {
+			"output": build_help_page(m99.help_text, m99.COMMANDS),
+			"interface_cleared": true,
+			"error": null,
+		}
+	var function = m99.COMMANDS[command_name] if command_name in m99.COMMANDS else null
+	if function == null or not function.reference.is_valid():
+		return {
+			"error": "Cette commande n'existe pas."
+		}
+	else:
+		var result = function.reference.call_func(options)
+		var cleared := false
+		var output := ""
+		if result.error != null:
+			return result
+		if command_name == "exit":
+			output = "M99 a été arrêté."
+			cleared = true
+		else:
+			if result.modified_program:
+				cleared = true
+				output = m99.buildm99()
+			output += result.output
+		output += "\n"
+		return {
+			"output": output,
+			"interface_cleared": cleared,
+			"error": null,
+		}
+
 # Returns the SystemElement instance located at the given path.
-# Returns null if the element doesn't exist,
-# or returns false if a particular error happened during the process,
-# such as denial of permission (x)
+# Returns null if the element doesn't exist.
+# Might throw an error using the ErrorHandler,
+# such as denial of permission (x).
 func get_file_element_at(path: PathObject):
 	var result = system.get_file_element_at(path, PWD) # might be SystemElement, null or String
 	if result is String: # if we got a String, it means it was a specific error
 		return error_handler.throw_error(result)
 	return result
 
-# Pretty much the same thing as `get_file_elemen_at`
+# Pretty much the same thing as `get_file_element_at`
 # but because we know we want to get the element located at PWD,
 # we use this to gain a little bit of performance.
 # We don't want to end up using `system.get_file_element_at(PWD, PWD)`.
@@ -665,43 +804,6 @@ func move(origin: SystemElement, destination: PathObject) -> bool:
 	emit_signal("file_moved", origin, copy)
 	return true
 
-func _cut_paragraph(paragraph: String, line_length: int) -> Array:
-	if paragraph.length() <= line_length:
-		return [paragraph]
-	var lines := []
-	var i := 0
-	var pos := 0
-	while i < (paragraph.length() / line_length):
-		var e := 0
-		while (pos+line_length+e) < paragraph.length() and paragraph[pos+line_length+e] != " ":
-			e += 1
-		lines.append(paragraph.substr(pos, line_length + e).strip_edges())
-		pos += line_length + e
-		i += 1
-	lines.append(paragraph.substr(pos).strip_edges())
-	return lines
-
-func build_manual_page_using(manual: Dictionary) -> String:
-	var output := ""
-	output += "[b]NOM[/b]\n\t" + manual.name + "\n\n"
-	output += "[b]SYNOPSIS[/b]\n"
-	for synopsis in manual.synopsis:
-		output += "\t" + synopsis
-	output += "\n\n[b]DESCRIPTION[/b]\n"
-	var description_lines := _cut_paragraph(manual.description, max_paragraph_width)
-	for line in description_lines:
-		output += "\t" + line + "\n"
-	if not manual.options.empty():
-		output += "[b]OPTIONS[/b]\n"
-		for option in manual.options:
-			output += "\t[b]" + option.name + "[/b]\n"
-			output += "\t\t" + option.description + "\n"
-	if not manual.examples.empty():
-		output += "\n[b]EXEMPLES[/b]\n"
-		for example in manual.examples:
-			output += "\t" + example + "\n"
-	return output
-
 # Example:
 # When we have redirections,
 # if the file doesn't exist on the standard output,
@@ -771,6 +873,11 @@ func interpret_redirections(redirections: Array) -> Array:
 	return result
 
 func man(options: Array, _standard_input: String) -> Dictionary:
+	var commands_list: Dictionary
+	if m99.started:
+		commands_list = m99.COMMANDS
+	else:
+		commands_list = self.COMMANDS
 	if options.size() == 0:
 		return {
 			"error": "quelle page du manuel désirez-vous ?"
@@ -779,13 +886,15 @@ func man(options: Array, _standard_input: String) -> Dictionary:
 		return {
 			"error": "uniquement le nom d'une commande est attendue."
 		}
-	if not options[0].value in COMMANDS:
-		return {
-			"error": "'" + options[0].value + "' est une commande inconnue"
-		}
-	if options[0].value == "help":
-		return help([], "")
-	var page := build_manual_page_using(COMMANDS[options[0].value].manual)
+	var page := ""
+	if options[0].value == "man":
+		page = build_manual_page_using(self.COMMANDS["man"].manual, max_paragraph_width)
+	else:
+		if not options[0].value in commands_list:
+			return {
+				"error": "'" + options[0].value + "' est une commande inconnue"
+			}
+		page = build_manual_page_using(commands_list[options[0].value].manual, max_paragraph_width)
 	emit_signal("manual_asked", options[0].value, page)
 	return {
 		"output": page,
@@ -797,28 +906,12 @@ func help(options: Array, _standard_input: String) -> Dictionary:
 		return {
 			"error": "aucun argument n'est attendu"
 		}
-	var output := "Ce terminal vous permet d'écrire des commandes Bash simplifiées.\nLe but est pédagogique. Vous pouvez apprendre des commandes et vous entrainer.\nLes commandes ont été reproduites le plus fidèlement possible, mais quelques différences peuvent apparaître.\n\nRappels sur comment écrire une commande :\nUne commande vous permet de manipuler les fichiers et dossiers de votre environnement de travail.\nEn règle générale, la syntaxe pour une commande ressemble à ça : [b]nom_de_la_commande[/b] [...[b]options[/b]] [...[b]arguments[/b]].\n\nUtilisez des redirections pour modifier le comportement d'une commande. Une redirection est un numéro : \n- 0 : entrée standard\n- 1 : sortie standard\n- 2 : sortie d'erreur\nExemple : head file.txt 1>resultat.txt (réécris, ou crée, le fichier \"resultat.txt\" avec le résultat écrit de la commande).\nUtilisez les symboles :\n- > : réécris le fichier\n- < : lis le fichier\n- >> : ajoute au fichier\n\nEnchainez des commandes sur la même ligne en les séparant par un \"|\" (\"pipe\" en anglais).\nL'entrée standard de la commande suivante sera le résultat écrit de la commande précédente.\nExemple : echo yoyo | cat\n\n"
-	var max_synopsis_size := 40
-	var max_description_size := 60
-	for command in COMMANDS:
-		var synopsis = replace_bbcode(COMMANDS[command].manual.synopsis[0], "")
-		var description = replace_bbcode(COMMANDS[command].manual.name, "")
-		var space = max_synopsis_size - synopsis.length()
-		description = description.right(description.find("-"))
-		output += synopsis.left(max_synopsis_size) + (" ".repeat(space + 3) if synopsis.length() < max_synopsis_size else "") + ("..." if synopsis.length() > max_synopsis_size else "") + " " + description.left(max_description_size) + ("..." if description.length() > max_description_size else "") + "\n"
+	var output := "Ce terminal vous permet d'écrire des commandes Bash simplifiées.\nLe but est pédagogique. Vous pouvez apprendre des commandes et vous entrainer.\nLes commandes ont été reproduites le plus fidèlement possible, mais quelques différences peuvent apparaître.\n\nRappels sur comment écrire une commande :\nUne commande vous permet de manipuler les fichiers et dossiers de votre environnement de travail.\nEn règle générale, la syntaxe pour une commande ressemble à ça : [b]nom_de_la_commande[/b] [...[b]options[/b]] [...[b]arguments[/b]].\n\nUtilisez des redirections pour modifier le comportement d'une commande. Une redirection est un numéro : \n- 0 : entrée standard\n- 1 : sortie standard\n- 2 : sortie d'erreur\nExemple : head file.txt 1>resultat.txt (réécris, ou crée, le fichier \"resultat.txt\" avec le résultat écrit de la commande).\nUtilisez les symboles :\n- > : réécris le fichier\n- < : lis le fichier\n- >> : ajoute au fichier\n\nEnchainez des commandes sur la même ligne en les séparant par un \"|\" (\"pipe\" en anglais).\nL'entrée standard de la commande suivante sera le résultat écrit de la commande précédente.\nExemple : echo yoyo | cat"
+	emit_signal("help_asked")
 	return {
-		"output": output,
+		"output": build_help_page(output, COMMANDS),
 		"error": null
 	}
-
-func replace_bbcode(text: String, replacement: String) -> String:
-	var regex := RegEx.new()
-	regex.compile("\\[\\/?(?:b|i|u|s|left|center|right|quote|code|list|img|spoil|color).*?\\]")
-	var search := regex.search_all(text)
-	var result := text
-	for r in search:
-		result = result.replace(r.get_string(), replacement)
-	return result
 
 func echo(options: Array, _standard_input: String) -> Dictionary:
 	var to_display := ""
@@ -1756,5 +1849,22 @@ func tail(options: Array, standard_input: String) -> Dictionary:
 		output += lines[e] + "\n"
 	return {
 		"output": output,
+		"error": null
+	}
+
+func startm99(options: Array, _standard_input: String) -> Dictionary:
+	if options.size() != 0:
+		return {
+			"error": "aucune option n'est attendue."
+		}
+	if interface_reference == null:
+		return {
+			"error": "une interface doit être définie."
+		}
+	if m99.PROGRAM == null:
+		m99.init_blank_M99()
+	m99.started = true
+	return {
+		"output": m99.buildm99(),
 		"error": null
 	}

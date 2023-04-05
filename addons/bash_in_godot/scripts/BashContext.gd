@@ -23,14 +23,13 @@ func set_variable(name: String, token: BashToken) -> bool:
 	})
 	return true
 
-# returns an empty string by default
+# Returns an empty string by default.
 func get_variable_value(name: String) -> String:
 	for variable in context:
 		if variable.name == name:
 			return str(variable.token.value)
 	return ""
 
-# just for debugging
 func _to_string() -> String:
 	var string := ""
 	for i in range(0,context.size()):

@@ -66,11 +66,13 @@ func _process(_delta):
 		history_index -= 1
 		prompt.text = history[clamp(history_index, 0, history.size() - 1)]
 		prompt.grab_focus()
+		prompt.set_cursor_position(prompt.text.length())
 	if Input.is_action_just_pressed("ui_down"):
 		if history_index < history.size() - 1:
 			history_index += 1
 			prompt.text = history[history_index]
 			prompt.grab_focus()
+			prompt.set_cursor_position(prompt.text.length())
 		elif prompt.text != "":
 			history_index += 1
 			prompt.clear()

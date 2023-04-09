@@ -366,7 +366,7 @@ var COMMANDS := {
 		"manual": {
 			"name": "tail - affiche les dernières lignes d'un fichier.",
 			"synopsis": ["[b]tail[/b] [[b]-n[/b] [u]nombre[/u]] [[u]fichier[/u]]"],
-			"description": "Par défaut, les 10 dernières lignes du fichier sont affichées. Précisez le nombre de lignes désirées avec l'option -n.",
+			"description": "Par défaut, les 10 dernières lignes du fichier sont affichées. Précisez le nombre de lignes désirées avec l'option -n. Vous pouvez partir du début du fichier en donnant plutôt un nombre qui commence par '+'. Ainsi, pour afficher un contenu sans la première ligne, ce serait 'tail +2'.",
 			"options": [
 				{
 					"name": "n",
@@ -376,7 +376,8 @@ var COMMANDS := {
 			"examples": [
 				"tail file.txt",
 				"tail -n 1 file.txt",
-				"cat file.txt | tail"
+				"cat file.txt | tail",
+				"cat file.csv | tail +2"
 			]
 		}
 	},
@@ -428,7 +429,7 @@ static func build_manual_page_using(manual: Dictionary, max_size: int) -> String
 	for line in description_lines:
 		output += "\t" + line + "\n"
 	if not manual.options.empty():
-		output += "[b]OPTIONS[/b]\n"
+		output += "\n[b]OPTIONS[/b]\n"
 		for option in manual.options:
 			output += "\t[b]" + option.name + "[/b]\n"
 			output += "\t\t" + option.description + "\n"

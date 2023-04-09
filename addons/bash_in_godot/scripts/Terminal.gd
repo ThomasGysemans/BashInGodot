@@ -60,6 +60,7 @@ func _display_error_or(error: String):
 
 var COMMANDS := {
 	"man": {
+		"allowed": true, # if false, an error "the command does not exist" will be thrown instead
 		"reference": funcref(self, "man"),
 		"manual": {
 			"name": "man - affiche la page du manuel expliquant une commande précise.",
@@ -70,6 +71,7 @@ var COMMANDS := {
 		}
 	},
 	"echo": {
+		"allowed": true,
 		"reference": funcref(self, "echo"),
 		"manual": {
 			"name": "echo - affiche un texte dans le terminal.",
@@ -88,6 +90,7 @@ var COMMANDS := {
 		}
 	},
 	"grep": {
+		"allowed": true,
 		"reference": funcref(self, "grep"),
 		"manual": {
 			"name": "grep - cherche un pattern dans l'entrée standard.",
@@ -100,6 +103,7 @@ var COMMANDS := {
 		}
 	},
 	"tr": {
+		"allowed": true,
 		"reference": funcref(self, "tr_"),
 		"manual": {
 			"name": "tr - remplace, ou supprime, un pattern précis depuis l'entrée standard pour l'afficher dans la sortie standard.",
@@ -121,6 +125,7 @@ var COMMANDS := {
 		}
 	},
 	"cat": {
+		"allowed": true,
 		"reference": funcref(self, "cat"),
 		"manual": {
 			"name": "cat - affiche le contenu d'un fichier en sortie standard.",
@@ -133,6 +138,7 @@ var COMMANDS := {
 		}
 	},
 	"ls": {
+		"allowed": true,
 		"reference": funcref(self, "ls"),
 		"manual": {
 			"name": "ls - liste le contenu d'un dossier.",
@@ -151,6 +157,7 @@ var COMMANDS := {
 		}
 	},
 	"clear": {
+		"allowed": true,
 		"reference": funcref(self, "clear"),
 		"manual": {
 			"name": "clear - vide le terminal de son contenu textuel.",
@@ -161,6 +168,7 @@ var COMMANDS := {
 		}
 	},
 	"pwd": {
+		"allowed": true,
 		"reference": funcref(self, "pwd"),
 		"manual": {
 			"name": "pwd - retourne le chemin absolu du dossier courant.",
@@ -171,6 +179,7 @@ var COMMANDS := {
 		}
 	},
 	"cd": {
+		"allowed": true,
 		"reference": funcref(self, "cd"),
 		"manual": {
 			"name": "cd - définis le chemin courant comme étant la cible.",
@@ -184,6 +193,7 @@ var COMMANDS := {
 		}
 	},
 	"touch": {
+		"allowed": true,
 		"reference": funcref(self, "touch"),
 		"manual": {
 			"name": "touch - crée un nouveau fichier selon la destination donnée.",
@@ -196,6 +206,7 @@ var COMMANDS := {
 		}
 	},
 	"mkdir": {
+		"allowed": true,
 		"reference": funcref(self, "mkdir"),
 		"manual": {
 			"name": "mkdir - crée un nouveau dossier selon la destination donnée.",
@@ -208,6 +219,7 @@ var COMMANDS := {
 		}
 	},
 	"rm": {
+		"allowed": true,
 		"reference": funcref(self, "rm"),
 		"manual": {
 			"name": "rm - supprime de manière définitive un élément.",
@@ -231,6 +243,7 @@ var COMMANDS := {
 		}
 	},
 	"cp": {
+		"allowed": true,
 		"reference": funcref(self, "cp"),
 		"manual": {
 			"name": "cp - copie un élément vers une aute destination.",
@@ -245,6 +258,7 @@ var COMMANDS := {
 		}
 	},
 	"mv": {
+		"allowed": true,
 		"reference": funcref(self, "mv"),
 		"manual": {
 			"name": "mv - déplace un élément vers une nouvelle destination.",
@@ -259,6 +273,7 @@ var COMMANDS := {
 		}
 	},
 	"help": {
+		"allowed": true,
 		"reference": funcref(self, "help"),
 		"manual": {
 			"name": "help - commande si vous avez besoin d'aide quant à Bash.",
@@ -269,6 +284,7 @@ var COMMANDS := {
 		}
 	},
 	"tree": {
+		"allowed": true,
 		"reference": funcref(self, "tree"),
 		"manual": {
 			"name": "tree - affiche une reconstitution de l'arborescence du dossier courant.",
@@ -279,6 +295,7 @@ var COMMANDS := {
 		}
 	},
 	"chmod": {
+		"allowed": true,
 		"reference": funcref(self, "chmod"),
 		"manual": {
 			"name": "chmod - définis les permissions accordées à un élément.",
@@ -294,6 +311,7 @@ var COMMANDS := {
 		}
 	},
 	"nano": {
+		"allowed": true,
 		"reference": funcref(self, "nano"),
 		"manual": {
 			"name": "nano - ouvre un éditeur pour éditer un fichier dans le terminal.",
@@ -306,6 +324,7 @@ var COMMANDS := {
 		}
 	},
 	"seq": {
+		"allowed": true,
 		"reference": funcref(self, "seq"),
 		"manual": {
 			"name": "seq - affiche une séquence de nombre.",
@@ -330,6 +349,7 @@ var COMMANDS := {
 		}
 	},
 	"ping": {
+		"allowed": true,
 		"reference": funcref(self, "ping"),
 		"manual": {
 			"name": "ping - établis une connexion simple à une autre adresse.",
@@ -343,6 +363,7 @@ var COMMANDS := {
 		}
 	},
 	"head": {
+		"allowed": true,
 		"reference": funcref(self, "head"),
 		"manual": {
 			"name": "head - affiche les premières lignes d'un fichier.",
@@ -362,6 +383,7 @@ var COMMANDS := {
 		}
 	},
 	"tail": {
+		"allowed": true,
 		"reference": funcref(self, "tail"),
 		"manual": {
 			"name": "tail - affiche les dernières lignes d'un fichier.",
@@ -382,6 +404,7 @@ var COMMANDS := {
 		}
 	},
 	"startm99": {
+		"allowed": true,
 		"reference": funcref(self, "startm99"),
 		"manual": {
 			"name": "startm99 - commande custom pour démarrer un simulateur de langage Assembler appelé M99.",
@@ -444,6 +467,8 @@ static func build_help_page(text: String, commands: Dictionary) -> String:
 	var max_synopsis_size := 40
 	var max_description_size := 60
 	for command in commands:
+		if not commands[command].allowed:
+			continue
 		var synopsis = replace_bbcode(commands[command].manual.synopsis[0], "")
 		var description = replace_bbcode(commands[command].manual.name, "")
 		var space = max_synopsis_size - synopsis.length()
@@ -489,6 +514,25 @@ func set_ip_address(ip: String) -> bool:
 		return true
 	return false
 
+# Sets all commands to "allowed: false",
+# except those given in `commands`.
+func set_allowed_commands(commands:Array) -> void:
+	for c in COMMANDS:
+		if c == "help":
+			continue
+		COMMANDS[c].allowed = false
+	var keys := COMMANDS.keys()
+	for c in commands:
+		if c in keys:
+			COMMANDS[c].allowed = true
+
+# Set "allowed: false" for all commands given in `commands`.
+func forbid_commands(commands: Array) -> void:
+	var keys := COMMANDS.keys()
+	for c in commands:
+		if c in keys:
+			COMMANDS[c].allowed = false
+
 func _write_to_redirection(redirection: Dictionary, output: String) -> void:
 	if redirection.type == Tokens.WRITING_REDIRECTION:
 		redirection.target.content = output
@@ -499,7 +543,7 @@ func _save_interface(interface: RichTextLabel):
 	if interface == null:
 		interface = interface_reference # if no interface is given to this function, then use the previous one
 	else:
-		interface_reference = interface # if an interface is given, then save it, it's useful for the M99
+		interface_reference = interface # if an interface is given, then save it
 	return interface
 
 func execute(input: String, interface: RichTextLabel = null) -> Dictionary:
@@ -544,7 +588,7 @@ func execute(input: String, interface: RichTextLabel = null) -> Dictionary:
 					return execute_file(executable, command.options, interpret_redirections(command.redirections), interface)
 			# if the function doesn't exist,
 			# function.reference.is_valid() will be false.
-			if function == null or not function.reference.is_valid():
+			if function == null or not function.reference.is_valid() or not function.allowed:
 				return {
 					"error": "Cette commande n'existe pas."
 				}
@@ -888,15 +932,16 @@ func man(options: Array, _standard_input: String) -> Dictionary:
 			"error": "uniquement le nom d'une commande est attendue."
 		}
 	var page := ""
-	if options[0].value == "man":
+	var command_name = options[0].value
+	if command_name == "man":
 		page = build_manual_page_using(self.COMMANDS["man"].manual, max_paragraph_width)
 	else:
-		if not options[0].value in commands_list:
+		if (not command_name in commands_list) or not commands_list[command_name].allowed:
 			return {
-				"error": "'" + options[0].value + "' est une commande inconnue"
+				"error": "'" + command_name + "' est une commande inconnue"
 			}
-		page = build_manual_page_using(commands_list[options[0].value].manual, max_paragraph_width)
-	emit_signal("manual_asked", options[0].value, page)
+		page = build_manual_page_using(commands_list[command_name].manual, max_paragraph_width)
+	emit_signal("manual_asked", command_name, page)
 	return {
 		"output": page,
 		"error": null

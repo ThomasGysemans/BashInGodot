@@ -1,5 +1,9 @@
 extends Node2D
 
+# Give this file to a node,
+# and give it as export variable of the terminals
+# so that they all share common attributes.
+
 export var user_name: String
 export var group_name: String
 
@@ -36,3 +40,16 @@ var ip_address := "192.168.10.2"
 # them to share the same property.
 # Override the property by setting an the export variable of the same name on the console node.
 var max_paragraph_size := 50
+
+# If you want to define exactly what commands
+# can be used, then use the array below.
+# All the commands that are not in the array
+# will be set as not allowed.
+# A not-allowed command appears like if it didn't exist at all.
+#var allowed_commands := ["echo", "cat"]
+
+# On the other hand, you can precise
+# what commands are **not** allowed:
+#var forbidden_commands := ["startm99"]
+
+# Note that "allowed_commands" will always be read before "forbidden_commands".

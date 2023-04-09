@@ -31,6 +31,8 @@ func _ready():
 		pid = rng.randi_range(1000, 10000)
 	var node := get_node_or_null(system_reference_node)
 	var system := System.new([])
+	var allowed_commands := []
+	var forbidden_commands := []
 	if node != null:
 		if "system" in node:
 			system = node.system
@@ -43,12 +45,20 @@ func _ready():
 		# If none are given, nor valid, then the default one from the Terminal scene is used.
 		if "max_paragraph_size" in node and max_paragraph_size == -1:
 			max_paragraph_size = node.max_paragraph_size
+		if "allowed_commands" in node:
+			allowed_commands = node.allowed_commands
+		if "forbidden_commands" in node:
+			forbidden_commands = node.forbidden_commands
 	terminal = Terminal.new(pid, system, editor)
 	terminal.set_dns(dns_config)
 	if max_paragraph_size > 0:
 		terminal.set_custom_text_width(max_paragraph_size)
 	if not ip_address.empty():
 		terminal.set_ip_address(ip_address)
+	if not allowed_commands.empty():
+		terminal.set_allowed_commands(allowed_commands)
+	if not forbidden_commands.empty():
+		terminal.forbid_commands(forbidden_commands)
 	add_child(interface)
 	add_child(prompt)
 	add_child(editor)

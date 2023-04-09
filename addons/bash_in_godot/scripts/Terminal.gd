@@ -1764,12 +1764,19 @@ func _avg(array: Array) -> float:
 		s += value
 	return s / array.size()
 
-func _handle_head_or_tail_command(options: Array, standard_input) -> Dictionary:
+func _handle_head_or_tail_command(command_name: String, options: Array, standard_input) -> Dictionary:
 	var text = null
 	var n := 10
 	var i := 0
+	var tail_shift = null
+	var option: BashToken
 	while i < options.size():
-		if options[i].is_flag():
+		option = options[i]
+		if option.is_flag():
+			if tail_shift != null:
+				return {
+					"error": "chemin '" + option.value + "' invalide."
+				}
 			if options[i].value == "n":
 				i += 1
 				if i >= options.size() or not options[i].is_plain():
@@ -1787,31 +1794,48 @@ func _handle_head_or_tail_command(options: Array, standard_input) -> Dictionary:
 					}
 			else:
 				return {
-					"error": "l'option '-" + options[i].value + "' est inconnue."
+					"error": "l'option '-" + option.value + "' est inconnue."
 				}
-		elif options[i].is_word():
-			var path := PathObject.new(options[i].value)
-			if not path.is_valid:
-				return {
-					"error": "le chemin n'est pas valide."
-				}
-			var element = get_file_element_at(path)
-			if element == null:
-				return {
-					"error": _display_error_or("le fichier n'existe pas")
-				}
-			if not element.can_read():
-				return {
-					"error": "permission refusée"
-				}
-			if not element.is_file():
-				return {
-					"error": "la cible n'est pas un fichier"
-				}
-			text = element.content
+		elif option.is_word():
+			if option.value.begins_with("+"):
+				if command_name == "head":
+					return {
+						"error": "chemin '" + option.value + "' invalide."
+					}
+				var value = option.value.right(1)
+				if value.is_valid_integer():
+					tail_shift = int(value)
+					if tail_shift < 0:
+						return {
+							"error": "valeur invalide pour indice de début : '" + option.value + "'."
+						}
+				else:
+					return {
+						"error": "valeur de début invalide."
+					}
+			else:
+				var path := PathObject.new(option.value)
+				if not path.is_valid:
+					return {
+						"error": "le chemin n'est pas valide."
+					}
+				var element = get_file_element_at(path)
+				if element == null:
+					return {
+						"error": _display_error_or("le fichier n'existe pas.")
+					}
+				if not element.can_read():
+					return {
+						"error": "permission refusée."
+					}
+				if not element.is_file():
+					return {
+						"error": "la cible n'est pas un fichier."
+					}
+				text = element.content
 		else:
 			return {
-				"error": "syntaxe invalide"
+				"error": "syntaxe invalide."
 			}
 		i += 1
 	if text == null:
@@ -1819,11 +1843,12 @@ func _handle_head_or_tail_command(options: Array, standard_input) -> Dictionary:
 	return {
 		"n": n,
 		"text": text,
+		"tail_shift": tail_shift,
 		"error": null
 	}
 
 func head(options: Array, standard_input: String) -> Dictionary:
-	var check := _handle_head_or_tail_command(options, standard_input)
+	var check := _handle_head_or_tail_command("head", options, standard_input)
 	if check.error != null:
 		return {
 			"error": check.error
@@ -1838,14 +1863,15 @@ func head(options: Array, standard_input: String) -> Dictionary:
 	}
 
 func tail(options: Array, standard_input: String) -> Dictionary:
-	var check := _handle_head_or_tail_command(options, standard_input)
+	var check := _handle_head_or_tail_command("tail", options, standard_input)
 	if check.error != null:
 		return {
 			"error": check.error
 		}
 	var output := ""
 	var lines = check.text.split("\n")
-	for e in range(max(lines.size() - check.n, 0), lines.size()):
+	var begin = max(lines.size() - check.n, 0) if check.tail_shift == null else max(check.tail_shift - 1, 0)
+	for e in range(begin, lines.size()):
 		output += lines[e] + "\n"
 	return {
 		"output": output,

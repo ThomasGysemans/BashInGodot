@@ -5,7 +5,7 @@ const INIT_TEXT = "Terminal M100 1.0.\nLe terminal fait maison [b]simplifié[/b]
 
 export(String) var user_name
 export(String) var group_name
-export(NodePath) var system_reference_node
+export(NodePath) var reference_node
 export(String) var ip_address = ""
 export(int) var pid = -1
 export(int) var max_paragraph_size = -1
@@ -29,7 +29,7 @@ func _ready():
 		var rng = RandomNumberGenerator.new()
 		rng.randomize()
 		pid = rng.randi_range(1000, 10000)
-	var node := get_node_or_null(system_reference_node)
+	var node := get_node_or_null(reference_node)
 	var system := System.new([])
 	var allowed_commands := []
 	var forbidden_commands := []

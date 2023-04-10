@@ -3,6 +3,7 @@ class_name BashContext
 
 # Each context will be an array of dictionaries:
 # [{ name: String, token: Token }]
+# The Token value can be a String, an integer, or a float, depending on the given value.
 # Note that the default value of a variable in Bash is an empty string
 # (so it's the value that is returned when the variable doesn't exist).
 var context := []

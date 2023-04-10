@@ -2,6 +2,8 @@
 extends Object
 class_name Terminal
 
+const HELP_TEXT := "Ce terminal vous permet d'écrire des commandes Bash simplifiées.\nLe but est pédagogique. Vous pouvez apprendre des commandes et vous entrainer.\nLes commandes ont été reproduites le plus fidèlement possible, mais quelques différences peuvent apparaître.\n\nRappels sur comment écrire une commande :\nUne commande vous permet de manipuler les fichiers et dossiers de votre environnement de travail.\nEn règle générale, la syntaxe pour une commande ressemble à ça : [b]nom_de_la_commande[/b] [...[b]options[/b]] [...[b]arguments[/b]].\n\nUtilisez des redirections pour modifier le comportement d'une commande. Une redirection est un numéro : \n- 0 : entrée standard\n- 1 : sortie standard\n- 2 : sortie d'erreur\nExemple : head file.txt 1>resultat.txt (réécris, ou crée, le fichier \"resultat.txt\" avec le résultat écrit de la commande).\nUtilisez les symboles :\n- > : réécris le fichier\n- < : lis le fichier\n- >> : ajoute au fichier\n\nEnchainez des commandes sur la même ligne en les séparant par un \"|\" (\"pipe\" en anglais).\nL'entrée standard de la commande suivante sera le résultat écrit de la commande précédente.\nExemple : echo yoyo | cat"
+
 # The signal `interface_changed` can be used to read the standard output of a successful command.
 # It is different from `command_executed` because `command_executed` might be thrown several times in a row.
 # Indeed, several commands can be on the same line separated by pipes.
@@ -19,7 +21,7 @@ class_name Terminal
 # - `move_inside_of()` (SystemElement.gd)
 
 signal command_executed (command, output) # command is a dictionary and output is the content of standard output, the signal will be emitted only if the command didn't throw an error
-signal error_thrown (command, reason) # emitted when the `command` thrown an error, which text is the `reason`
+signal error_thrown (command, reason) # emitted when the `command` threw an error, which text is the `reason`
 signal permissions_changed (file) # file is a SystemElement (file or FOLDER)
 signal file_created (file) # file is a SystemElement (file or FOLDER)
 signal file_destroyed (file) # file is a SystemElement (file or FOLDER)
@@ -516,7 +518,7 @@ func set_ip_address(ip: String) -> bool:
 
 # Sets all commands to "allowed: false",
 # except those given in `commands`.
-func set_allowed_commands(commands:Array) -> void:
+func set_allowed_commands(commands: Array) -> void:
 	for c in COMMANDS:
 		if c == "help":
 			continue
@@ -786,9 +788,7 @@ func get_parent_element_from(path: PathObject) -> SystemElement:
 	return get_file_element_at(PathObject.new(path.parent) if path.parent != null else PWD)
 
 func copy_element(e: SystemElement) -> SystemElement:
-	var ref := SystemElement.new(e.type, e.filename, e.base_dir, e.content, copy_children_of(e), user_name, group_name)
-	ref.permissions = e.permissions # important to have the same permissions on the copy
-	return ref
+	return SystemElement.new(e.type, e.filename, e.base_dir, e.content, copy_children_of(e), user_name, group_name, e.permissions)
 
 func copy_children_of(e: SystemElement) -> Array:
 	var list := []
@@ -952,10 +952,9 @@ func help(options: Array, _standard_input: String) -> Dictionary:
 		return {
 			"error": "aucun argument n'est attendu"
 		}
-	var output := "Ce terminal vous permet d'écrire des commandes Bash simplifiées.\nLe but est pédagogique. Vous pouvez apprendre des commandes et vous entrainer.\nLes commandes ont été reproduites le plus fidèlement possible, mais quelques différences peuvent apparaître.\n\nRappels sur comment écrire une commande :\nUne commande vous permet de manipuler les fichiers et dossiers de votre environnement de travail.\nEn règle générale, la syntaxe pour une commande ressemble à ça : [b]nom_de_la_commande[/b] [...[b]options[/b]] [...[b]arguments[/b]].\n\nUtilisez des redirections pour modifier le comportement d'une commande. Une redirection est un numéro : \n- 0 : entrée standard\n- 1 : sortie standard\n- 2 : sortie d'erreur\nExemple : head file.txt 1>resultat.txt (réécris, ou crée, le fichier \"resultat.txt\" avec le résultat écrit de la commande).\nUtilisez les symboles :\n- > : réécris le fichier\n- < : lis le fichier\n- >> : ajoute au fichier\n\nEnchainez des commandes sur la même ligne en les séparant par un \"|\" (\"pipe\" en anglais).\nL'entrée standard de la commande suivante sera le résultat écrit de la commande précédente.\nExemple : echo yoyo | cat"
 	emit_signal("help_asked")
 	return {
-		"output": build_help_page(output, COMMANDS),
+		"output": build_help_page(HELP_TEXT, COMMANDS),
 		"error": null
 	}
 

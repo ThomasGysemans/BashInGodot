@@ -50,7 +50,7 @@ static func are_permissions_valid(p: String) -> bool:
 # - ch: the children of the folder (USE THIS ONLY IF t=1)
 # - creator: the name of the user that created this file.
 # - group: the name of the group that created this file.
-func _init(t: int, name: String, p, c = "", ch = [], creator: String = "", group: String = ""):
+func _init(t: int, name: String, p, c = "", ch = [], creator: String = "", group: String = "", given_permissions: String = ""):
 	type = t
 	filename = name
 	base_dir = p
@@ -59,19 +59,29 @@ func _init(t: int, name: String, p, c = "", ch = [], creator: String = "", group
 	absolute_path = PathObject.new(base_dir + "/" + filename) if not base_dir.empty() else PathObject.new("/")
 	creator_name = creator
 	group_name = group
-	if is_folder():
-		permissions = "755" # default permissions of a folder
+	if given_permissions.empty():
+		set_default_permissions()
 	else:
-		permissions = "644" # default permissions of a file
+		if are_permissions_valid(given_permissions):
+			permissions = given_permissions
+		else:
+			set_default_permissions()
+			push_warning("The " + ("file" if t == 0 else "folder") + " '" + name + "' received invalid permissions: '" + given_permissions + "'. Default permissions were given instead.")
 	if content.length() > 0 and type == 1:
-		push_error("It is not possible for a folder to have content. The object was destroyed.\nInvalid file's name: " + filename)
+		push_error("It is not possible for a folder to have content. The object was destroyed. Invalid file's name: " + filename)
 		self.free()
 	if children.size() > 0 and type == 0:
-		push_error("A file cannot contain other files. The object was destroyed.\nInvalid file's name: " + filename)
+		push_error("A file cannot contain other files. The object was destroyed. Invalid file's name: " + filename)
 		self.free()
 
 func append(element: SystemElement):
 	children.append(element)
+
+func set_default_permissions() -> void:
+	if is_folder():
+		permissions = "755" # default permissions of a folder
+	else:
+		permissions = "644" # default permissions of a file
 
 func count_depth() -> int:
 	if base_dir == "/":
@@ -79,16 +89,16 @@ func count_depth() -> int:
 	else:
 		return base_dir.count("/") + 1
 
-func is_file():
+func is_file() -> bool:
 	return type == 0
 
-func is_folder():
+func is_folder() -> bool:
 	return type == 1
 
-func is_hidden():
+func is_hidden() -> bool:
 	return filename.begins_with(".")
 
-func rename(new_name: String):
+func rename(new_name: String) -> void:
 	filename = new_name
 
 # When we copy/move of a file to new location,
@@ -116,7 +126,7 @@ func move_inside_of(new_absolute_path):
 		child.move_inside_of(self.base_dir + "/" + child.absolute_path.parent)
 	return self
 
-func equals(another: SystemElement):
+func equals(another: SystemElement) -> bool:
 	if another == null: return false
 	if self.type == another.type and self.absolute_path.equals(another.absolute_path):
 		return true

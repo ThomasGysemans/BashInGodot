@@ -62,7 +62,7 @@ A custom Bash parser was created to customise the behaviour of Bash and to make 
 
 |Name|Description|
 |----|-----------|
-|[M99](#M99)|A basic language that resembles Assembler.|
+|[M99](#additional-feature-m99)|A basic language that resembles Assembler.|
 
 ### Class Names
 
@@ -480,6 +480,15 @@ Emitted when the custom `help` command was used.
 - `interface_cleared`
 
 Emitted when the `clear` command was used.
+
+**NOTE**:
+
+All the arguments passed to the signals are passed by **REFERENCE**. Therefore, any modification of the references will modify the terminal's system tree (unless the element is voluntarily removed by the algorithm which is the case for the `origin` argument of the `file_moved` signal).
+
+If a copy needs to be done, then see the following functions:
+- `copy_element()` (see [Helper Methods from Terminal](#helper-methods-from-terminal))
+- `copy_children_of()` (see [Helper Methods from Terminal](#helper-methods-from-terminal))
+- `move_inside_of()` (see [Create Your File Structure](#create-your-file-structure))
 
 ## Allowing or Disabling Commands
 

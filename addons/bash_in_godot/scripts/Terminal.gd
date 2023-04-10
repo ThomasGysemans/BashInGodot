@@ -33,7 +33,7 @@ signal directory_changed (target) # emitted when the `cd` command is used (and d
 signal interface_changed (content) # emitted when something is printed onto the screen. It is not emitted when the interface is cleared.
 signal manual_asked (command_name, output) # emitted when the `man` command is used to open the manual page of a command.
 signal variable_set (name, value, is_new) # emitted when a variable is created, "name" and "value" are strings, is_new is true if the variable was just created or false if it was modified.
-signal script_executed (script, output) # emitted when a script was executed. `script` is the instance of SystemElement of the script, `output` is the complete output printed in the interface/
+signal script_executed (script, output) # emitted when a script was executed. `script` is the instance of SystemElement of the script, `output` is the complete output printed in the interface.
 signal help_asked # emitted when the custom `help` command is used.
 signal interface_cleared
 
@@ -936,7 +936,7 @@ func man(options: Array, _standard_input: String) -> Dictionary:
 	if command_name == "man":
 		page = build_manual_page_using(self.COMMANDS["man"].manual, max_paragraph_width)
 	else:
-		if (not command_name in commands_list) or not commands_list[command_name].allowed:
+		if (not command_name in commands_list) or (not m99.started and not commands_list[command_name].allowed):
 			return {
 				"error": "'" + command_name + "' est une commande inconnue"
 			}

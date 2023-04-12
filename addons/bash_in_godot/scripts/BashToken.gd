@@ -36,8 +36,8 @@ func is_word() -> bool:
 func is_pipe() -> bool:
 	return type == Tokens.PIPE
 
-func is_eof() -> bool:
-	return type == Tokens.EOF
+func is_eol() -> bool:
+	return type == Tokens.EOL
 
 func is_descriptor() -> bool:
 	return type == Tokens.DESCRIPTOR
@@ -66,6 +66,9 @@ func is_variable() -> bool:
 # (n)>&(m)
 func is_and() -> bool:
 	return type == Tokens.AND
+
+func is_command_substitution() -> bool:
+	return type == Tokens.SUBSTITUTION
 
 func _to_string():
 	return "[" + type + ":" + str(value) + ("(" + str(metadata) + ")" if metadata != null else "") + "]"

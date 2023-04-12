@@ -548,6 +548,54 @@ func _save_interface(interface: RichTextLabel):
 		interface_reference = interface # if an interface is given, then save it
 	return interface
 
+# Give as input the parsing result of a command.
+# Let's take for example `cat $(echo file.txt)`
+# This will read the substitution tokens
+# and replace them with a PLAIN token
+# with value the standard output of the sub-command.
+# If the standard output of the sub-command is empty, it will be ignored.
+# If the `clear` command is executed inside the sub-command, it is ignored.
+# This function will return a dictionary.
+# {"error": String or null, "tokens": Array or undefined }
+func interpret_substitutions(options: Array) -> Dictionary:
+	var tokens := []
+	for option in options:
+		if option.is_command_substitution():
+			var interpretation = interpret_one_substitution(option)
+			if interpretation.error != null:
+				return interpretation
+			else:
+				if interpretation.token != null:
+					tokens.append(interpretation.token)
+		else:
+			tokens.append(option)
+	return {
+		"error": null,
+		"tokens": tokens
+	}
+
+# Interprets a single substitution.
+# Usually, we'll only want to use `interpret_substitutions`.
+# However, it's useful for the substitutions that may be in the redirections.
+# Returns a dictionary { "error": String or null, "token": BashToken of type PLAIN or null if there is not output } 
+func interpret_one_substitution(token: BashToken) -> Dictionary:
+	var execution := execute(token.value)
+	if execution.error != null:
+		return execution
+	if not execution.output.empty():
+		return {
+			"error": null,
+			"token": BashToken.new(Tokens.PLAIN, execution.output.strip_edges())
+		}
+	return {
+		"error": null,
+		"token": null
+	}
+
+# Executes the input of the user.
+# The command substitutions will be recursively executed using `interpret_substitutions` on the input.
+# If the commands fails, then this function will return { "error": String }.
+# Otherwise, it will return { "error": null, "output": String, "interface_cleard": bool } 
 func execute(input: String, interface: RichTextLabel = null) -> Dictionary:
 	interface = _save_interface(interface)
 	var parser := BashParser.new(input, pid)
@@ -595,6 +643,11 @@ func execute(input: String, interface: RichTextLabel = null) -> Dictionary:
 					"error": "Cette commande n'existe pas."
 				}
 			else:
+				var substitutions_interpretation = interpret_substitutions(command.options)
+				if substitutions_interpretation.error != null:
+					return substitutions_interpretation
+				else:
+					command.options = substitutions_interpretation.tokens
 				var command_redirections = interpret_redirections(command.redirections)
 				if error_handler.has_error:
 					return {
@@ -877,12 +930,37 @@ func get_file_or_make_it(path: PathObject):
 func interpret_redirections(redirections: Array) -> Array:
 	var result := [null, null, null]
 	for i in range(0, redirections.size()):
+		# It might be command substitutions.
+		# They could be everywhere and needs to be interpreted.
+		# It is possible to have a substitution even with a copied redirection.
+		# Example: 2>&$(echo 1)
+		var target: BashToken = redirections[i].target
+		if target.is_command_substitution():
+			var interpretation = interpret_one_substitution(target)
+			if interpretation.error != null:
+				error_handler.throw_error(interpretation.error)
+			else:
+				if interpretation.token == null:
+					error_handler.throw_error("La redirection est ambiguë.")
+				else:
+					target = interpretation.token
 		if redirections[i].copied:
-			result[redirections[i].port] = result[redirections[i].target]
+			# If we have recursive substitution commands,
+			# we might have a situation where the descriptor is a PLAIN token.
+			var index: int
+			if target.is_descriptor():
+				index = target.value
+			elif target.is_plain() and target.value.is_valid_integer() and target.value in ["0", "1", "2"]:
+				index = int(target.value)
+			else:
+				error_handler.throw_error("Descripteur invalide pour une des redirections. Il faut que ce soit un nombre : 0, 1 ou 2.")
+			result[redirections[i].port] = result[index]
+			target = result[index].target
 		else:
 			result[redirections[i].port] = redirections[i]
+		result[redirections[i].port].target = target
 	if result[0] != null:
-		var target: SystemElement = get_file_element_at(PathObject.new(result[0].target))
+		var target: SystemElement = get_file_element_at(PathObject.new(result[0].target.value))
 		if error_handler.has_error:
 			target = null
 		elif target == null:
@@ -897,7 +975,7 @@ func interpret_redirections(redirections: Array) -> Array:
 		}
 	for i in range(1, result.size()):
 		if result[i] != null:
-			var path := PathObject.new(result[i].target)
+			var path := PathObject.new(result[i].target.value)
 			var target = null
 			if not path.is_valid:
 				error_handler.throw_error("Le chemin de la redirection " + str(i) + " n'est pas valide.")
@@ -962,7 +1040,7 @@ func echo(options: Array, _standard_input: String) -> Dictionary:
 	var to_display := ""
 	var line_break := true
 	for option in options:
-		if option.is_eof():
+		if option.is_eol():
 			break
 		if option.is_flag():
 			if option.value == "n":

@@ -20,7 +20,7 @@ func _init(c: String, p: int):
 # the very first item of the list is the name of a command, and the first "PLAIN" after a PIPE is also a command
 func _read(input: String) -> Array:
 	if input.empty():
-		return [BashToken.new(Tokens.EOF, null)]
+		return [BashToken.new(Tokens.EOL, null)]
 	var pos := 0
 	var result := []
 	var length := input.length()
@@ -36,6 +36,33 @@ func _read(input: String) -> Array:
 				break
 			elif input[pos] == "$":
 				result.append(BashToken.new(Tokens.VARIABLE, "$")) # the pid number ($$)
+			elif input[pos] == "(": # substitution
+				pos += 1
+				var parenthesis_count = 1 # when it reaches 0 it means the right parenthesis was closed
+				var subtitution_content := ""
+				while pos < length and parenthesis_count > 0:
+					if input[pos] == "(":
+						parenthesis_count += 1
+					elif input[pos] == ")":
+						parenthesis_count -= 1
+						if parenthesis_count == 0: # we break right away because we don't want the final parenthesis to be in the `substitution_content`.
+							pos += 1
+							break
+					elif _is_char_quote(input[pos]): # we don't want to count the parenthesis a string might contain
+						var parsed_string = _read_string(input.right(pos))
+						if not parsed_string.string_closed:
+							error = "Erreur de syntaxe : une chaine de caractères n'a pas été fermée."
+							return []
+						else:
+							pos += parsed_string.value.length() + 2
+						subtitution_content += parsed_string.quote + parsed_string.value + parsed_string.quote
+						continue
+					subtitution_content += input[pos]
+					pos += 1
+				if parenthesis_count != 0:
+					error = "Erreur de syntaxe : une substitution de commande n'a pas été fermée."
+					return []
+				result.append(BashToken.new(Tokens.SUBSTITUTION, subtitution_content))
 			else:
 				var name = _read_identifier(input, pos, length, false)
 				if name.token.value.is_valid_identifier():
@@ -45,6 +72,7 @@ func _read(input: String) -> Array:
 					# return a PLAIN token with value "$" + the identifier
 					result.append(BashToken.new(Tokens.PLAIN, "$" + name.token.value))
 				pos = name.pos
+				continue
 		elif input[pos] == "0" or input[pos] == "1" or input[pos] == "2":
 			var descriptor := input[pos]
 			var word_pos := pos
@@ -90,6 +118,10 @@ func _read(input: String) -> Array:
 				error = "Erreur de syntaxe : descripteur attendu après une telle redirection"
 				return []
 			var d_value: String = input[pos]
+			# it might be a variable,
+			# or a command substitution
+			if d_value == "$":
+				continue
 			if d_value == "0" or d_value == "1" or d_value == "2":
 				result.append(BashToken.new(Tokens.DESCRIPTOR, int(d_value)))
 				pos += 1
@@ -165,18 +197,18 @@ func _read(input: String) -> Array:
 				can_accept_variable = false # meaning it was something else, so after that no variable affectation can be made.
 			continue
 		pos += 1
-	result.append(BashToken.new(Tokens.EOF, null))
+	result.append(BashToken.new(Tokens.EOL, null))
 	return result
 
 # Reads a word, a path (something that isn't anything else)
 func _read_identifier(input: String, pos: int, length: int, count_equals_sign: bool) -> Dictionary:
 	var identifier := ""
 	if count_equals_sign: # we want to include "=" in the identifier
-		while pos < length and input[pos] != " " and input[pos] != "$":
+		while pos < length and (not input[pos] in [" ", "$", ">", "<", ">>"]):
 			identifier += input[pos]
 			pos += 1
 	else: # we don't want to include the "=" in the indentifier (hence stopping as soon as we encounter one)
-		while pos < length and input[pos] != " " and input[pos] != "$" and input[pos] != "=":
+		while pos < length and (not input[pos] in [" ", "$", ">", "<", ">>", "="]):
 			identifier += input[pos]
 			pos += 1
 	return {
@@ -278,11 +310,11 @@ func _read_redirection(input: String, pos: int, length: int) -> Dictionary:
 #   }
 # ]
 # If the command has redirections, it will look something like this:
-# "redirections": [{ "port": 1, "type": Tokens.WRITING_REDIRECTION, "target": "file.txt", "copied": false }]
+# "redirections": [{ "port": 1, "type": Tokens.WRITING_REDIRECTION, "target": BashToken(Tokens.PLAIN, "file.txt"), "copied": false }]
 # == 1>file.txt
 # if "copied" is `true`:
 # == 1>&2 (target is the same as the redirection of port 2)
-# Finally, if the line is just a variable affectation (yoyo=5 for example), then:
+# Finally, if this is just a variable affectation (yoyo=5 for example), then:
 # [
 #   {
 #     "type": "variable",
@@ -315,12 +347,12 @@ func parse(context: BashContext) -> Array:
 		if i < number_of_tokens:
 			if interpreted_tokens_list[i].is_pipe():
 				i += 1
-			elif interpreted_tokens_list[i].is_eof():
+			elif interpreted_tokens_list[i].is_eol():
 				break
 	return commands
 
 func _parse_command(list: Array):
-	if list.empty() or list[0].is_eof():
+	if list.empty() or list[0].is_eol():
 		return "Erreur de syntaxe : BASH attendait une commande mais il n'y a rien."
 	if list[0].type != Tokens.PLAIN:
 		return "Erreur de syntaxe : '" + str(list[0].value) + "' n'est pas une commande."
@@ -332,7 +364,7 @@ func _parse_command(list: Array):
 	var found_redirection := false
 	var i := 1
 	while i < number_of_tokens:
-		if list[i].is_pipe() or list[i].is_eof():
+		if list[i].is_pipe() or list[i].is_eol():
 			break
 		elif list[i].is_descriptor():
 			var descriptor: int = list[i].value
@@ -344,13 +376,13 @@ func _parse_command(list: Array):
 			if i >= number_of_tokens:
 				return "Erreur de syntaxe : fin inattendue de redirection."
 			var copied: bool = false
-			var target = null # a String if there is no copy, an integer otherwise
+			var target: BashToken
 			if list[i].is_and():
 				copied = true
 				i += 1
-				target = list[i].value
-			elif list[i].is_plain():
-				target = list[i].value
+				target = list[i]
+			elif list[i].is_plain() or list[i].is_command_substitution():
+				target = list[i]
 			else:
 				return "Erreur de syntaxe : un chemin est attendu après une redirection"
 			c.redirections.append({

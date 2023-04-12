@@ -42,6 +42,7 @@ A custom Bash parser was created to customise the behaviour of Bash and to make 
 |command 2>error_redirection|Redirections are available. Use `0`, `1` or `2` with their symbols `>`, `<` or `>>`. Note that `<<` is not available.|
 |echo $HELLO|Variables are available. Define one with the syntax `NAME=VALUE` and use it with the syntax `$NAME`.|
 |echo "$FOO"|Strings are interpreted as one argument, and characters can be escaped, and double quotes act like they should.|
+|`cat $(echo file.txt) 1>$(echo copy.txt) 2>&$(echo 1)`|Command substitutions.|
 |./script|A script can be executed. The lines starting with `#` will be ignored.|
 |Permissions|Each file can have its own permissions. Use `chmod` with the digital representation of the permissions, or use the shortcut for each kind of permission (`chmod g-x .` for example).| 
 |History|The user can use previous commands and navigate through the history using the up and down arrow keys.|
@@ -57,6 +58,7 @@ A custom Bash parser was created to customise the behaviour of Bash and to make 
 |Home|The symbol `~` is unknown.|
 |Multi-user|Even though you can set the creator's name of a file, there is no way to properly log in. Besides, the permissions verifications are only done on the user side, meaning that the permissions granted to the group and to the others actually don't matter and are ignored.|
 
+And some other things that i didn't quote.
 
 #### Additional Features
 

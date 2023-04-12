@@ -6,7 +6,7 @@ const STRING = "S" # a string (so something between quotes, which are '"' or "'"
 const FLAG = "F" # an option which starts with "-" and has a name of length == 1
 const LONG_FLAG = "LG" # an option which starts with "--" and has a name of length > 1
 const PIPE = "PI" # a pipe (|) that separated two commands
-const EOF = "EOF" # end of string
+const EOL = "EOL" # end of line
 const DESCRIPTOR = "DES" # 1>file.txt, here 1 is a descriptor
 const WRITING_REDIRECTION = ">"
 const APPEND_WRITING_REDIRECTION = ">>"
@@ -14,3 +14,4 @@ const READING_REDIRECTION = "<"
 const AND = "&" # &, useful when we have "(n)>&(m)"
 const VARIABLE = "VAR"
 const EQUALS = "=" # "=" for variable affectations
+const SUBSTITUTION = "SUB" # echo $(echo yoyo), here the substitution is "echo yoyo"

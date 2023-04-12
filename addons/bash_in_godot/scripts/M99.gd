@@ -14,6 +14,11 @@ const MEMO := [
 	"8xy = JNE xy  | R!=xy => ignore la cellule suivante"
 ]
 
+signal program_executed (starting_point, R, A, B, output)
+signal program_failed (starting_point)
+signal on_cell_set (position, value)
+signal on_program_filled (position, program)
+
 var help_text := "L'aide a été ouverte.\nTapez la commande \"show\" pour en sortir.\n\nLe M99 est une simulation théorique du langage Assembler.\nPour faire simple, il s'agit d'instructions très basiques qui à elles seules\nreprésentent toutes les opérations successives que peut réaliser un processeur.\nLes instructions sont représentées en 3 nombres dont la signification est affichée dans le Mémo.\nVous pouvez également les écrire dans leur équivalent mnémonique.\nPar exemple : \"199 299 400 599\" = \"LDA 99 LDB 99 ADD HLT\".\n\nDans le M99, la position d'une cellule se compose de deux chiffres : x et y.\nLa première cellule est 00, la dernière est 99.\nLe premier chiffre correspond à la ligne horizontale, celle du haut,\net le second chiffre à la ligne de gauche, celle verticale.\n\nPour sauvegarder des constantes, utilisez les \"registres\" A ou B,\nou stockez directement la valeur dans une cellule\ninaccessible choisie avec l'instruction STR.\n\nPour manipuler des données entrées par un utilisateur, remplissez le tableau des entrées,\net le programme lira chacune des entrées quand demandé par LDA 99 ou LDB 99.\n\n" + ("\n".join(MEMO)) + "\n\nCi-dessous la liste des commandes possibles.\nEntrez \"man nom_de_la_commande\" pour avoir de l'aide sur une commande particulière."
 
 var started := false
@@ -452,6 +457,7 @@ func setm99(options: Array) -> Dictionary:
 		if "error" in checkup:
 			return checkup
 		value = checkup.value
+	emit_signal("on_cell_set", pos, value)
 	PROGRAM[pos.y][pos.x] = value # y x
 	return {
 		"output": "",
@@ -506,6 +512,7 @@ func fillm99(options: Array) -> Dictionary:
 	if "error" in checkup:
 		return checkup
 	fill_M99_with(checkup.commands, pos)
+	emit_signal("on_program_filled", pos, checkup.commands)
 	return {
 		"modified_program": true,
 		"output": "",
@@ -796,9 +803,11 @@ func executem99(options: Array) -> Dictionary:
 		address = pos
 	var result = execute_m99_program(address)
 	if result == false:
+		emit_signal("program_failed", address)
 		return {
 			"error": "Le programme a planté !"
 		}
+	emit_signal("program_executed", address, REGISTRY_R, REGISTRY_A, REGISTRY_B, OUTPUT)
 	return {
 		"error": null,
 		"output": "" if (current_input_index) == (INPUTS.size() - 1) else "[color=yellow]Attention : trop d'entrées par rapport à celles demandées par le programme exécuté (" + str(current_input_index + 1) + "/" + str(INPUTS.size()) + ").[/color]",

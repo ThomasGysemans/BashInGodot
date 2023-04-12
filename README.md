@@ -523,6 +523,24 @@ When you have multiple consoles on the same scene, it's useful to create a nearb
 
 The M99 simulates an assembly language. It is useful for educational purposes. To start it, use the `startm99` custom command.
 
+A few signals are available :
+
+- `program_executed (starting_point, R, A, B, output)`
+
+Emitted when the program was executed. It gives the starting point, the value of the R, A and B registries and the output.
+
+- `program_failed (starting_point)`
+
+Emitted when the execution failed. It gives the starting point of the executed program.
+
+- `on_cell_set (position, value)`
+
+Emitted when the user successfully sets a value for a cell at a specific position.
+
+- `on_program_filled (position, program)`
+
+Emitted when the user uses the `fill` command to fill in multiple commands at a specific position.
+
 For more details, read the help page on the demo (in French).
 
 ## Licence

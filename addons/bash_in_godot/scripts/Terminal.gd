@@ -640,7 +640,7 @@ func execute(input: String, interface: RichTextLabel = null) -> Dictionary:
 			# function.reference.is_valid() will be false.
 			if function == null or not function.reference.is_valid() or not function.allowed:
 				return {
-					"error": "Cette commande n'existe pas."
+					"error": "La commande '" + command.name + "' n'existe pas."
 				}
 			else:
 				var substitutions_interpretation = interpret_substitutions(command.options)

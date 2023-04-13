@@ -183,9 +183,18 @@ func _read(input: String) -> Array:
 				if can_accept_variable:
 					result.append(BashToken.new(Tokens.EQUALS, null))
 					if pos < length:
-						var value = _read_identifier(input, pos, length, true)
-						result.append(value.token)
-						pos = value.pos + 1
+						if _is_char_quote(input[pos]):
+							var string = _read_string(input.right(pos))
+							if not string.string_closed:
+								error = "Erreur de syntaxe : une chaine de caractères n'a pas été fermée lors de la création d'une variable."
+								return []
+							else:
+								pos += string.value.length() + 2
+							result.append(BashToken.new(Tokens.STRING, string.value, { "quote": string.quote }))
+						else:
+							var value = _read_identifier(input, pos, length, true)
+							result.append(value.token)
+							pos = value.pos + 1
 					else:
 						result.append(BashToken.new(Tokens.PLAIN, "")) # it's possible to write "variable="
 				else:
@@ -408,6 +417,18 @@ func _parse_command(list: Array):
 		"command": c
 	}
 
+# This method interprets the value of a variable in order to make several PLAIN tokens out of it.
+# Indeed, if the value holds multiple words, then each of them are different tokens.
+# See the comments in `interpret_tokens_variable_with(context)` below.
+# The tokens are returned in an array.
+# We consider that no errors can happen during this process.
+func _interpret_variable_value(value: String) -> Array:
+	var words: Array = value.split(" ", false) # false is important so that we don't get empty tokens
+	var tokens: Array = []
+	for word in words:
+		tokens.append(BashToken.new(Tokens.PLAIN, word))
+	return tokens
+
 func interpret_tokens_variables_with(context: BashContext) -> Array:
 	var list := []
 	for i in range(0, tokens_list.size()):
@@ -415,13 +436,19 @@ func interpret_tokens_variables_with(context: BashContext) -> Array:
 		if token.is_variable():
 			# If multiple variables are chained like this: "$$$yoyo"
 			# then we want a single token representing the concatenation of their value.
-			# To do that, If we detect that the previous token that we interpreted was also a variable,
+			# To do that, if we detect that the previous token that we interpreted was also a variable,
 			# then we add to the value of the previous interpreted token the interpreted value of the current token.
 			var value: String = str(pid) if token.value == "$" else context.get_variable_value(token.value)
 			if i > 0 and tokens_list[i-1].is_variable():
 				list[i-1].value += value
 			else:
-				list.append(BashToken.new(Tokens.PLAIN, value))
+				# If the value has multiple words separated by white space, then it must be interpreted as multiple PLAIN tokens.
+				# You can observe this behaviours by creating a variable with multiple words, like this: HELLO="HEL LO"
+				# Create a script that loops over $@ and does an echo of each value.
+				# You'll observe multiple lines getting printed, even if you just typed ./script $HELLO
+				var tokens_from_value := _interpret_variable_value(value)
+				for t in tokens_from_value:
+					list.append(t)
 		elif token.is_string():
 			if token.metadata.quote == "'":
 				list.append(token)
@@ -437,8 +464,8 @@ func interpret_string(token: BashToken, context) -> BashToken:
 	var identifier := ""
 	var identifier_pos := 0
 	var i := 0
-	var value_to_add := ""
 	var new_token := BashToken.new(Tokens.STRING, "", { "quote": '"' })
+	var value_to_add := ""
 	while i < token.value.length():
 		if token.value[i] == "$":
 			identifier_pos = i

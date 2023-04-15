@@ -52,9 +52,9 @@ A custom Bash parser was created to customise the behaviour of Bash and to make 
 
 |Name|Description|
 |----|-----------|
-|Processes|There is no process, no `pid`.|
+|Processes|There is no process, no `pid`. However, there is the possibility to use `$$`.|
 |Prompting|A command cannot ask an input to the user, nor a confirmation before execution.|
-|Background tasks|The symbols `;` and `&` are unknown. As a consequence, `echo ;` will print `;` whereas it will not in Bash.|
+|Background tasks|The symbol `&` to run tasks in the background is unknown.|
 |Home|The symbol `~` is unknown.|
 |Multi-user|Even though you can set the creator's name of a file, there is no way to properly log in. Besides, the permissions verifications are only done on the user side, meaning that the permissions granted to the group and to the others actually don't matter and are ignored.|
 
@@ -115,10 +115,10 @@ The lexer will finally return the following array :
   BashToken(type:PLAIN, value:echo),
   BashToken(type:FLAG, value:n),
   BashToken(type:STRING, value:This is text., quote: "),
-  BashToken(type:PIPE, value:null),
+  BashToken(type:PIPE, value:'|'),
   BashToken(type:PLAIN, value:cat),
   BashToken(type:DESCRIPTOR, value:1),
-  BashToken(type:WRITING_REDIRECTION, value:null),
+  BashToken(type:WRITING_REDIRECTION, value:'>'),
   BashToken(type:PLAIN, value:result.txt)
 ]
 ```

@@ -580,12 +580,19 @@ func interpret_substitutions(options: Array) -> Dictionary:
 # Returns a dictionary { "error": String or null, "token": BashToken of type PLAIN or null if there is not output } 
 func interpret_one_substitution(token: BashToken) -> Dictionary:
 	var execution := execute(token.value)
-	if execution.error != null:
-		return execution
-	if not execution.output.empty():
+	# Because the execution possibly have multiple independant commands
+	# we have to make only one token out of everything.
+	var one_line_output := ""
+	for output in execution.outputs:
+		if output.error != null:
+			one_line_output += output.error
+		else:
+			one_line_output += output.text.strip_edges() + " "
+	one_line_output = one_line_output.strip_edges()
+	if not one_line_output.empty():
 		return {
 			"error": null,
-			"token": BashToken.new(Tokens.PLAIN, execution.output.strip_edges())
+			"token": BashToken.new(Tokens.PLAIN, one_line_output)
 		}
 	return {
 		"error": null,
@@ -601,117 +608,142 @@ func execute(input: String, interface: RichTextLabel = null) -> Dictionary:
 	var parser := BashParser.new(input, pid)
 	if not parser.error.empty():
 		return {
-			"error": parser.error
+			"outputs": [{
+				"error": parser.error
+			}]
 		}
 	var parsing := parser.parse(runtime[0])
 	if not parser.error.empty():
 		return {
-			"error": parser.error
+			"outputs": [{
+				"error": parser.error
+			}]
 		}
-	var standard_input := ""
+	var standard_input := "" # the last standard output
 	var cleared := false
-	for command in parsing:
-		if command.type == "command":
-			if m99.started:
-				if not command.redirections.empty():
-					return {
-						"error": "m99 n'accepte aucune redirection."
-					}
-				return execute_m99_command(command.name, command.options, interface)
-			var function = COMMANDS[command.name] if command.name in COMMANDS else null
-			if function == null and command.name.find('/') != -1:
-				var path_to_executable := PathObject.new(command.name)
-				if path_to_executable.is_valid:
-					var executable = get_file_element_at(path_to_executable)
-					if executable == null:
+	var outputs := [] # the array that will contain all outputs which are dictionaries : {"error": String or null, "text": String, "interface_cleared": bool }
+	if m99.started and parsing.size() > 1:
+		return {
+			"outputs": [{
+				"error": "Impossible d'enchainer plusieurs commandes à la suite de la sorte dans le M99."
+			}]
+		}
+	for line in parsing:
+		for command in line:
+			if command.type == "command":
+				if m99.started:
+					if not command.redirections.empty():
 						return {
-							"error": _display_error_or("Le fichier n'existe pas")
+							"outputs": [{
+								"error": "M99 n'accepte aucune redirection."
+							}]
 						}
-					if not executable.is_file():
-						return {
-							"error": "L'élément n'est pas un fichier !"
-						}
-					if not executable.can_execute_or_go_through():
-						return {
-							"error": "Permission refusée"
-						}
-					return execute_file(executable, command.options, interpret_redirections(command.redirections), interface)
-			# if the function doesn't exist,
-			# function.reference.is_valid() will be false.
-			if function == null or not function.reference.is_valid() or not function.allowed:
-				return {
-					"error": "La commande '" + command.name + "' n'existe pas."
-				}
-			else:
-				var substitutions_interpretation = interpret_substitutions(command.options)
-				if substitutions_interpretation.error != null:
-					return substitutions_interpretation
+					return execute_m99_command(command.name, command.options, interface)
+				var function = COMMANDS[command.name] if command.name in COMMANDS else null
+				if function == null and command.name.find('/') != -1:
+					var path_to_executable := PathObject.new(command.name)
+					if path_to_executable.is_valid:
+						# for now, an error in the file will stop the entire input
+						# even if there are other commands waiting, separated by semicolons
+						var executable = get_file_element_at(path_to_executable)
+						if executable == null:
+							outputs.append({
+								"error": _display_error_or("Le fichier n'existe pas")
+							})
+							break
+						if not executable.is_file():
+							outputs.append({
+								"error": "L'élément n'est pas un fichier !"
+							})
+							break
+						if not executable.can_execute_or_go_through():
+							outputs.append({
+								"error": "Permission refusée"
+							})
+							break
+						outputs.append(execute_file(executable, command.options, interpret_redirections(command.redirections), interface))
+				# if the function doesn't exist,
+				# function.reference.is_valid() will be false.
+				if function == null or not function.reference.is_valid() or not function.allowed:
+					outputs.append({
+						"error": "La commande '" + command.name + "' n'existe pas."
+					})
+					break
 				else:
-					command.options = substitutions_interpretation.tokens
-				var command_redirections = interpret_redirections(command.redirections)
-				if error_handler.has_error:
-					return {
-						"error": "Commande '" + command.name + "' : " + error_handler.clear()
-					}
-				for i in range(0, command_redirections.size()):
-					if command_redirections[i] != null and command_redirections[i].target == null:
-						return {
-							"error": "Impossible de localiser, ni de créer, la destination du descripteur " + str(i) + "."
-						}
-				var result = function.reference.call_func(command.options, command_redirections[0].target.content if command_redirections[0] != null and command_redirections[0].type == Tokens.READING_REDIRECTION else standard_input)
-				if command_redirections[2] != null:
-					if result.error == null:
-						if command_redirections[2].type == Tokens.WRITING_REDIRECTION:
-							command_redirections[2].target.content = ""
-					else:
-						emit_signal("error_thrown", command, result.error)
-						if command_redirections[2].type == Tokens.WRITING_REDIRECTION:
-							command_redirections[2].target.content = "Commande '" + command.name + "' : " + result.error
-						elif command_redirections[2].type == Tokens.APPEND_WRITING_REDIRECTION:
-							command_redirections[2].target.content += "Commande '" + command.name + "' : " + result.error
-						return {
-							"output": "",
-							"interface_cleard": false,
-							"error": null
-						} # if there is an error, we have to stop the program anyway
-				if result.error != null:
-					emit_signal("error_thrown", command, result.error)
-					return {
-						"error": "Commande '" + command.name + "' : " + result.error
-					}
-				else:
-					emit_signal("command_executed", command, result.output)
-					if m99.started:
-						if interface != null:
-							interface.text = ""
-						cleared = true
-						standard_input = result.output
+					var substitutions_interpretation = interpret_substitutions(command.options)
+					if substitutions_interpretation.error != null:
+						outputs.append(substitutions_interpretation)
 						break
-					if command_redirections[0] != null:
-						# Even though it doesn't make any sense to try to write something
-						# to the standard input, Bash overwrites the content of the target anyway.
-						# We have to reproduce the same behaviour, no matter how weird it sounds.
-						# The output to apply on the standard input would always be an empty string.
-						# If the standard input doesn't have a writing redirection (> or >>),
-						# then this function won't do anything.
-						_write_to_redirection(command_redirections[0], "")
-					if command_redirections[1] != null:
-						_write_to_redirection(command_redirections[1], result.output)
 					else:
-						standard_input = result.output
-					if command.name == "clear":
-						cleared = true
-						if interface != null:
-							emit_signal("interface_cleared")
-		else: # the line is a variable affectation
-			var is_new = runtime[0].set_variable(command.name, command.value) # command.value is a BashToken
-			emit_signal("variable_set", command.name, command.value.value, is_new)
-	if interface != null and not standard_input.empty():
-		emit_signal("interface_changed", standard_input)
+						command.options = substitutions_interpretation.tokens
+					var command_redirections = interpret_redirections(command.redirections)
+					if error_handler.has_error:
+						outputs.append({
+							"error": "Commande '" + command.name + "' : " + error_handler.clear()
+						})
+						break
+					for i in range(0, command_redirections.size()):
+						if command_redirections[i] != null and command_redirections[i].target == null:
+							outputs.append({
+								"error": "Impossible de localiser, ni de créer, la destination du descripteur " + str(i) + "."
+							})
+							break
+					var result = function.reference.call_func(command.options, command_redirections[0].target.content if command_redirections[0] != null and command_redirections[0].type == Tokens.READING_REDIRECTION else standard_input)
+					if command_redirections[2] != null:
+						if result.error == null:
+							if command_redirections[2].type == Tokens.WRITING_REDIRECTION:
+								command_redirections[2].target.content = ""
+						else:
+							emit_signal("error_thrown", command, result.error)
+							if command_redirections[2].type == Tokens.WRITING_REDIRECTION:
+								command_redirections[2].target.content = "Commande '" + command.name + "' : " + result.error
+							elif command_redirections[2].type == Tokens.APPEND_WRITING_REDIRECTION:
+								command_redirections[2].target.content += "Commande '" + command.name + "' : " + result.error
+							break # if there is an error, we have to stop the program anyway
+					if result.error != null:
+						emit_signal("error_thrown", command, result.error)
+						outputs.append({
+							"error": "Commande '" + command.name + "' : " + result.error
+						})
+						break
+					else:
+						emit_signal("command_executed", command, result.output)
+						if m99.started:
+							if interface != null:
+								interface.text = ""
+							cleared = true
+							standard_input = result.output
+							break
+						if command_redirections[0] != null:
+							# Even though it doesn't make any sense to try to write something
+							# to the standard input, Bash overwrites the content of the target anyway.
+							# We have to reproduce the same behaviour, no matter how weird it sounds.
+							# The output to apply on the standard input would always be an empty string.
+							# If the standard input doesn't have a writing redirection (> or >>),
+							# then this function won't do anything.
+							_write_to_redirection(command_redirections[0], "")
+						if command_redirections[1] != null:
+							_write_to_redirection(command_redirections[1], result.output)
+						else:
+							standard_input = result.output
+						if command.name == "clear":
+							cleared = true
+							if interface != null:
+								emit_signal("interface_cleared")
+			else: # the line is a variable affectation
+				var is_new = runtime[0].set_variable(command.name, command.value) # command.value is a BashToken
+				emit_signal("variable_set", command.name, command.value.value, is_new)
+		if not standard_input.empty():
+			emit_signal("interface_changed", standard_input)
+			outputs.append({
+				"error": null,
+				"text": standard_input,
+				"interface_cleared": cleared
+			})
+		cleared = false
+		standard_input = ""
 	return {
-		"output": standard_input,
-		"interface_cleared": cleared,
-		"error": null
+		"outputs": outputs,
 	}
 
 # Executes a script.
@@ -728,30 +760,37 @@ func execute_file(file: SystemElement, options: Array, redirections: Array, inte
 		if line.begins_with("#"): # ignore comments (line starting with '#')
 			continue
 		else:
-			var result := execute(line, null)
+			var result := execute(line) # the line might be composed of several independant commands (separated by ";")
+			var error = null
+			for o in result.outputs:
+				if o.error != null:
+					error = o.error
+					break
 			if redirections[2] != null:
-				if result.error == null:
+				if error == null:
 					if redirections[2].type == Tokens.WRITING_REDIRECTION:
 						redirections[2].target.content = ""
 				else:
 					if redirections[2].type == Tokens.WRITING_REDIRECTION:
-						redirections[2].target.content = result.error
+						redirections[2].target.content = error
 					elif redirections[2].type == Tokens.APPEND_WRITING_REDIRECTION:
-						redirections[2].target.content += result.error
+						redirections[2].target.content += error
 					return {
-						"output": "",
+						"text": "",
 						"interface_cleared": false,
 						"error": null
 					}
-			if result.error != null:
+			if error != null:
 				return {
-					"error": result.error
+					"error": error
 				}
 			else:
-				output += result.output
-				if result.interface_cleared:
-					cleared = true
-					output = "" # reset the output
+				for o in result.outputs:
+					if o.interface_cleared:
+						cleared = true
+						output = "" # reset the output
+					else:
+						output += o.text
 	# The redirections must be treated after the end of the script,
 	# except for the port number 2 because it has to stop the execution
 	if redirections[0] != null:
@@ -765,7 +804,7 @@ func execute_file(file: SystemElement, options: Array, redirections: Array, inte
 	elif interface != null and not output.empty():
 		emit_signal("script_executed", file, output)
 	return {
-		"output": output,
+		"text": output,
 		"interface_cleared": cleared,
 		"error": null
 	}

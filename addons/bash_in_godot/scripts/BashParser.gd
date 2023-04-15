@@ -29,6 +29,8 @@ func _read(input: String) -> Array:
 		if input[pos] == " ":
 			pos += 1
 			continue
+		elif input[pos] == ";":
+			result.append(BashToken.new(Tokens.SEMICOLON, ';'))
 		elif input[pos] == "$":
 			pos += 1
 			if pos >= length or input[pos] == " ":
@@ -110,7 +112,7 @@ func _read(input: String) -> Array:
 				result.append(redirection.token)
 				pos = redirection.pos
 		elif input[pos] == "&":
-			result.append(BashToken.new(Tokens.AND, null))
+			result.append(BashToken.new(Tokens.AND, '&'))
 			pos += 1
 			while pos < length and input[pos] == " ":
 				pos += 1
@@ -138,7 +140,7 @@ func _read(input: String) -> Array:
 				pos += parsed_string.value.length() + 2
 			result.append(BashToken.new(Tokens.STRING, parsed_string.value, { "quote": parsed_string.quote }))
 		elif input[pos] == "|":
-			result.append(BashToken.new(Tokens.PIPE, null))
+			result.append(BashToken.new(Tokens.PIPE, '|'))
 			can_accept_variable = true # echo yoyo | yoyo=55 is possible
 		elif input[pos] == "-":
 			pos += 1
@@ -181,7 +183,7 @@ func _read(input: String) -> Array:
 			if pos < length and input[pos] == "=":
 				pos += 1
 				if can_accept_variable:
-					result.append(BashToken.new(Tokens.EQUALS, null))
+					result.append(BashToken.new(Tokens.EQUALS, '='))
 					if pos < length:
 						if _is_char_quote(input[pos]):
 							var string = _read_string(input.right(pos))
@@ -264,13 +266,13 @@ func _read_redirection(input: String, pos: int, length: int) -> Dictionary:
 			}
 		if input[pos] == ">":
 			return {
-				"token": BashToken.new(Tokens.APPEND_WRITING_REDIRECTION, null),
+				"token": BashToken.new(Tokens.APPEND_WRITING_REDIRECTION, '>>'),
 				"error": null,
 				"pos": pos
 			}
 		else:
 			return {
-				"token": BashToken.new(Tokens.WRITING_REDIRECTION, null),
+				"token": BashToken.new(Tokens.WRITING_REDIRECTION, '>'),
 				"error": null,
 				"pos": pos - 1
 			}
@@ -286,7 +288,7 @@ func _read_redirection(input: String, pos: int, length: int) -> Dictionary:
 			}
 		else:
 			return {
-				"token": BashToken.new(Tokens.READING_REDIRECTION, null),
+				"token": BashToken.new(Tokens.READING_REDIRECTION, '<'),
 				"error": null,
 				"pos": pos - 1
 			}
@@ -300,23 +302,48 @@ func _read_redirection(input: String, pos: int, length: int) -> Dictionary:
 # The goal of this function is to identify the commands among the tokens list.
 # The very first token must be a PLAIN (the name of the command).
 # Every tokens that is after a command's name belongs to this command and will be given as its arguments.
-# A command can have multiple subcommands, each one separated by a pipe (|).
-# The very next token after a pipe must be a PLAIN (which is the name of the following command).
+# An input can have multiple commands, each one separated by a pipe (|) or a semicolon (;).
+# If they are separated by a pipe, then the standard output of the first one becomes the standard input of the second one.
+# If they are separated by a semicolon, then they're completely independant from one another.
+# The very next token after a pipe or a semicolon must be a PLAIN (which is the name of the following command).
 # For example, the command: "echo -n 'yoyo' | tr y t'
 # would give:
 # [
-#   {
-#     "type": "command",
-#     "name": "echo",
-#     "options": ["-n", "yoyo"],
-#     "redirections": []
-#   },
-#   {
-#     "type": "command"
-#     "name": "tr",
-#     "options": ["y", "t"],
-#     "redirections": []
-#   }
+#   [
+#     {
+#       "type": "command",
+#       "name": "echo",
+#       "options": ["-n", "yoyo"],
+#       "redirections": []
+#     },
+#     {
+#       "type": "command"
+#       "name": "tr",
+#       "options": ["y", "t"],
+#       "redirections": []
+#     }
+#   ]
+# ]
+# However, the command "echo hello ; echo world" are two different commands that must be executed one after the other.
+# If the first one fails, it does not stop the second one from being executed.
+# It would give something like this:
+# [
+#   [
+#     {
+#       "type": "command",
+#       "name": "echo",
+#       "options": ["hello"],
+#       "redirections": []
+#     }
+#   ],
+#   [
+#     {
+#       "type": "command"
+#       "name": "echo",
+#       "options": ["world"],
+#       "redirections": []
+#     }
+#   ]
 # ]
 # If the command has redirections, it will look something like this:
 # "redirections": [{ "port": 1, "type": Tokens.WRITING_REDIRECTION, "target": BashToken(Tokens.PLAIN, "file.txt"), "copied": false }]
@@ -325,15 +352,18 @@ func _read_redirection(input: String, pos: int, length: int) -> Dictionary:
 # == 1>&2 (target is the same as the redirection of port 2)
 # Finally, if this is just a variable affectation (yoyo=5 for example), then:
 # [
-#   {
-#     "type": "variable",
-#     "name": "yo",
-#     "value": BashToken
-#   }
+#   [
+#     {
+#       "type": "variable",
+#       "name": "yo",
+#       "value": BashToken
+#     }
+#   ]
 # ]
 func parse(context: BashContext) -> Array:
 	var i := 0
-	var commands := []
+	var e := 0
+	var commands := [[]]
 	var number_of_tokens := tokens_list.size()
 	var interpreted_tokens_list := interpret_tokens_variables_with(context)
 	# Probably one of the weirdest thing in Bash:
@@ -352,28 +382,48 @@ func parse(context: BashContext) -> Array:
 		i += r.number_of_read_tokens
 		if has_pipe and r.command.type == "variable":
 			break
-		commands.append(r.command)
+		commands[e].append(r.command)
 		if i < number_of_tokens:
 			if interpreted_tokens_list[i].is_pipe():
 				i += 1
 			elif interpreted_tokens_list[i].is_eol():
 				break
+		if r.ended_with_semicolon:
+			i += 1
+			if i >= number_of_tokens or interpreted_tokens_list[i].is_eol():
+				break
+			commands.append([])
+			e += 1
 	return commands
 
 func _parse_command(list: Array):
 	if list.empty() or list[0].is_eol():
-		return "Erreur de syntaxe : BASH attendait une commande mais il n'y a rien."
+		return "Erreur de syntaxe : bash attendait une commande mais il n'y a rien."
 	if list[0].type != Tokens.PLAIN:
-		return "Erreur de syntaxe : '" + str(list[0].value) + "' n'est pas une commande."
+		return "Erreur de syntaxe : le symbole '" + str(list[0].value) + "' n'était pas attendu"
 	var is_variable_affectation: bool = list.size() > 1 and list[1].is_equal_sign()
 	if is_variable_affectation and not list[0].value.is_valid_identifier():
 		return "Erreur de syntaxe : l'identifiant '" + list[0].value + "' n'est pas un nom de variable valide."
-	var c := { "type": "command", "name": list[0].value, "options": [], "redirections": [] } if not is_variable_affectation else { "type": "variable", "name": list[0].value, "value": null }
+	var c := {
+		"type": "command",
+		"name": list[0].value,
+		"options": [],
+		"redirections": []
+	} if not is_variable_affectation else {
+		"type": 
+		"variable",
+		"name": list[0].value,
+		"value": null
+	}
 	var number_of_tokens = list.size()
+	var found_semicolon := false
 	var found_redirection := false
 	var i := 1
 	while i < number_of_tokens:
 		if list[i].is_pipe() or list[i].is_eol():
+			break
+		elif list[i].is_semicolon():
+			found_semicolon = true
 			break
 		elif list[i].is_descriptor():
 			var descriptor: int = list[i].value
@@ -414,6 +464,7 @@ func _parse_command(list: Array):
 		i += 1
 	return {
 		"number_of_read_tokens": i,
+		"ended_with_semicolon": found_semicolon,
 		"command": c
 	}
 

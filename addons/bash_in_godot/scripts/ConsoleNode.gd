@@ -139,12 +139,13 @@ func _on_command_entered(new_text: String):
 	if not terminal.m99.started:
 		_print_command(new_text)
 	var result := terminal.execute(new_text, interface)
-	if result.error != null:
-		_print_error(result.error)
-	else:
-		if "interface_cleared" in result and result.interface_cleared == true:
-			interface.text = ""
-		interface.append_bbcode(result.output)
+	for output in result.outputs:
+		if output.error != null:
+			_print_error(output.error)
+		else:
+			if output.interface_cleared:
+				interface.text = ""
+			interface.append_bbcode(output.text)
 
 func _print_command(command: String):
 	interface.append_bbcode("$ " +  command + "\n")

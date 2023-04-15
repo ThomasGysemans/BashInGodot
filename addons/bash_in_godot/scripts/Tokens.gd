@@ -15,3 +15,4 @@ const AND = "&" # &, useful when we have "(n)>&(m)"
 const VARIABLE = "VAR"
 const EQUALS = "=" # "=" for variable affectations
 const SUBSTITUTION = "SUB" # echo $(echo yoyo), here the substitution is "echo yoyo"
+const SEMICOLON = ";"

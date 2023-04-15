@@ -2,7 +2,7 @@ extends Object
 class_name BashToken
 
 var type: String
-var value = null
+var value = null # just a few tokens can have a null value`. Even when it's useless, it is best for the error mesages
 var metadata = null # metadata will be null for all tokens except for STRING because we need to know what quotes were used.
 
 func _init(t: String, v, m = null):
@@ -69,6 +69,9 @@ func is_and() -> bool:
 
 func is_command_substitution() -> bool:
 	return type == Tokens.SUBSTITUTION
+
+func is_semicolon() -> bool:
+	return type == Tokens.SEMICOLON
 
 func _to_string():
 	return "[" + type + ":" + str(value) + ("(" + str(metadata) + ")" if metadata != null else "") + "]"

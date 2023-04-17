@@ -33,7 +33,7 @@ signal directory_changed (target) # emitted when the `cd` command is used (and d
 signal interface_changed (content) # emitted when something is printed onto the screen. It is not emitted when the interface is cleared.
 signal manual_asked (command_name, output) # emitted when the `man` command is used to open the manual page of a command.
 signal variable_set (name, value, is_new) # emitted when a variable is created, "name" and "value" are strings, is_new is true if the variable was just created or false if it was modified.
-signal script_executed (script, output) # emitted when a script was executed. `script` is the instance of SystemElement of the script, `output` is the complete output printed in the interface.
+signal script_executed (script, output) # emitted when a script was executed. `script` is the instance of SystemElement of the script, `output` is the output printed to the interface. It does not contain what's been redirected.
 signal help_asked # emitted when the custom `help` command is used.
 signal interface_cleared
 
@@ -565,8 +565,8 @@ func interpret_substitutions(options: Array) -> Dictionary:
 			if interpretation.error != null:
 				return interpretation
 			else:
-				if interpretation.token != null:
-					tokens.append(interpretation.token)
+				if interpretation.tokens != null:
+					tokens.append_array(interpretation.tokens)
 		else:
 			tokens.append(option)
 	return {
@@ -577,7 +577,7 @@ func interpret_substitutions(options: Array) -> Dictionary:
 # Interprets a single substitution.
 # Usually, we'll only want to use `interpret_substitutions`.
 # However, it's useful for the substitutions that may be in the redirections.
-# Returns a dictionary { "error": String or null, "token": BashToken of type PLAIN or null if there is not output } 
+# Returns a dictionary { "error": String or null, "tokens": array of PLAIN BashTokens, or just null if there is not output } 
 func interpret_one_substitution(token: BashToken) -> Dictionary:
 	var execution := execute(token.value)
 	# Because the execution possibly have multiple independant commands
@@ -589,14 +589,15 @@ func interpret_one_substitution(token: BashToken) -> Dictionary:
 		else:
 			one_line_output += output.text.strip_edges() + " "
 	one_line_output = one_line_output.strip_edges()
+	var splitted_token := _split_variable_value(one_line_output)
 	if not one_line_output.empty():
 		return {
 			"error": null,
-			"token": BashToken.new(Tokens.PLAIN, one_line_output)
+			"tokens": splitted_token
 		}
 	return {
 		"error": null,
-		"token": null
+		"tokens": null
 	}
 
 # Executes the input of the user.
@@ -605,31 +606,35 @@ func interpret_one_substitution(token: BashToken) -> Dictionary:
 # Otherwise, it will return { "error": null, "output": String, "interface_cleard": bool } 
 func execute(input: String, interface: RichTextLabel = null) -> Dictionary:
 	interface = _save_interface(interface)
-	var parser := BashParser.new(input, pid)
+	var lexer := BashLexer.new(input)
+	if not lexer.error.empty():
+		return {
+			"outputs": [{
+				"error": lexer.error
+			}]
+		}
+	return _execute_tokens(lexer.tokens_list, interface)
+
+func _execute_tokens(tokens: Array, interface: RichTextLabel = null) -> Dictionary:
+	var parser := BashParser.new(runtime[0], pid)
+	var parsing := parser.parse(tokens)
 	if not parser.error.empty():
 		return {
 			"outputs": [{
 				"error": parser.error
 			}]
 		}
-	var parsing := parser.parse(runtime[0])
-	if not parser.error.empty():
-		return {
-			"outputs": [{
-				"error": parser.error
-			}]
-		}
-	var standard_input := "" # the last standard output
-	var cleared := false
-	var outputs := [] # the array that will contain all outputs which are dictionaries : {"error": String or null, "text": String, "interface_cleared": bool }
 	if m99.started and parsing.size() > 1:
 		return {
 			"outputs": [{
 				"error": "Impossible d'enchainer plusieurs commandes à la suite de la sorte dans le M99."
 			}]
 		}
-	for line in parsing:
-		for command in line:
+	var outputs := [] # the array that will contain all outputs which are dictionaries : {"error": String or null, "text": String, "interface_cleared": bool }
+	var standard_input := "" # the last standard output
+	var cleared := false
+	for node in parsing:
+		for command in node:
 			if command.type == "command":
 				if m99.started:
 					if not command.redirections.empty():
@@ -639,6 +644,21 @@ func execute(input: String, interface: RichTextLabel = null) -> Dictionary:
 							}]
 						}
 					return execute_m99_command(command.name, command.options, interface)
+				
+				# The interpretation of the variables must be done here.
+				# It could have been done during the parsing process but the for loops would not work properly.
+				command.options = interpret_variables(command.options)
+				for i in range(0, command.redirections.size()):
+					var interpretation := interpret_variables([command.redirections[i].target])
+					if interpretation.size() > 1:
+						return {
+							"outputs": [{
+								"error": "Symbole inattendu après redirection du port " + str(command.redirections[i].port) + "." 
+							}]
+						}
+					else:
+						command.redirections[i].target = interpretation[0]
+				
 				var function = COMMANDS[command.name] if command.name in COMMANDS else null
 				if function == null and command.name.find('/') != -1:
 					var path_to_executable := PathObject.new(command.name)
@@ -661,7 +681,10 @@ func execute(input: String, interface: RichTextLabel = null) -> Dictionary:
 								"error": "Permission refusée"
 							})
 							break
-						outputs.append(execute_file(executable, command.options, interpret_redirections(command.redirections), interface))
+						var file_execution = execute_file(executable, command.options, interpret_redirections(command.redirections), interface)
+						for o in file_execution.outputs:
+							outputs.append(o)
+						continue
 				# if the function doesn't exist,
 				# function.reference.is_valid() will be false.
 				if function == null or not function.reference.is_valid() or not function.allowed:
@@ -730,6 +753,8 @@ func execute(input: String, interface: RichTextLabel = null) -> Dictionary:
 							cleared = true
 							if interface != null:
 								emit_signal("interface_cleared")
+			elif command.type == "for":
+				outputs.append_array(_execute_for_loop(command).outputs)
 			else: # the line is a variable affectation
 				var is_new = runtime[0].set_variable(command.name, command.value) # command.value is a BashToken
 				emit_signal("variable_set", command.name, command.value.value, is_new)
@@ -746,72 +771,188 @@ func execute(input: String, interface: RichTextLabel = null) -> Dictionary:
 		"outputs": outputs,
 	}
 
+# Interprets a token of type VAR.
+# Those tokens are variables.
+# Sometimes in the parsing process,
+# we'll want to interpret them right away
+# in order to use their value directly.
+# However, in some cases we don't want them to be interpreted.
+# This is the case for the for-loop.
+# Also, because some variables might be interpreted as multiple tokens,
+# we have to return an array, even though most of the time it will contain only one element.
+func interpret_variables(tokens: Array) -> Array:
+	var list := []
+	var token: BashToken
+	for i in range(0, tokens.size()):
+		token = tokens[i]
+		if token.is_variable():
+			# If multiple variables are chained like this: "$$$yoyo"
+			# then we want a single token representing the concatenation of their value.
+			# To do that, if we detect that the previous token that we interpreted was also a variable,
+			# then we add to the value of the previous interpreted token the interpreted value of the current token.
+			var value: String = str(pid) if token.value == "$" else runtime[0].get_variable_value(token.value)
+			if i > 0 and tokens[i-1].is_variable():
+				list[i-1].value += value
+			else:
+				# If the value has multiple words separated by white space, then it must be interpreted as multiple PLAIN tokens.
+				# You can observe this behaviour by creating a variable with multiple words, like this: HELLO="HEL LO"
+				# Create a script that loops over $@ and does an echo of each value.
+				# You'll observe multiple lines getting printed, even if you just typed ./script $HELLO
+				# It does not happen if the variable is in a string.
+				# It's called "word-splitting"
+				var tokens_from_value := _split_variable_value(value)
+				for t in tokens_from_value:
+					list.append(t)
+		elif token.is_string():
+			if token.metadata.quote == "'":
+				list.append(token)
+			else:
+				list.append(_interpret_string(token))
+		elif token.is_plain() and token.value == "$$":
+			list.append(BashToken.new(Tokens.PLAIN, str(pid)))
+		else:
+			list.append(token)
+	return list
+
+# This method interprets the value of a variable in order to make several PLAIN tokens out of it.
+# Indeed, if the value holds multiple words, then each of them are different tokens.
+# See the comments in `interpret_variables()` above.
+# The tokens are returned in an array.
+# We consider that no errors can happen during this process.
+func _split_variable_value(value: String) -> Array:
+	var r = RegEx.new()
+	r.compile("\\S+") # any non-whitespace character (so none of these: " ", "\n", "\t")
+	var words: Array = []
+	for m in r.search_all(value):
+		words.append(m.get_string())
+	var tokens: Array = []
+	for word in words:
+		tokens.append(BashToken.new(Tokens.PLAIN, word))
+	return tokens
+
+# Replaces the variables with their value.
+# Call this method only if the string was created using double quotes.
+func _interpret_string(token: BashToken) -> BashToken:
+	var identifier := ""
+	var identifier_pos := 0
+	var i := 0
+	var new_token := BashToken.new(Tokens.STRING, "", { "quote": '"' })
+	var value_to_add := ""
+	while i < token.value.length():
+		if token.value[i] == "$":
+			identifier_pos = i
+			i += 1
+			if i >= token.value.length():
+				new_token.value += "$"
+				break
+			if token.value[i] == "$":
+				identifier = "$$"
+				i += 1
+			elif token.value[i] == " ":
+				new_token.value += "$"
+				continue
+			else:
+				while i < token.value.length() and token.value[i] != " ":
+					if not (identifier + token.value[i]).is_valid_identifier():
+						break
+					identifier += token.value[i]
+					i += 1
+			if identifier == "$$":
+				value_to_add = str(pid)
+			else:
+				value_to_add = runtime[0].get_variable_value(identifier)
+			new_token.value += value_to_add
+			identifier = ""
+		else:
+			new_token.value += token.value[i]
+			i += 1
+	return new_token
+
+# todo: allow comments
+
 # Executes a script.
 # We assume that the given file is executable.
-# Note that the standard input is ignored.
-# Also, because there is no functions in our Bash,
-# we don't interpret the arguments (`options`) given to the command.
+# Also, for now, the options are not interpreted as variables $1 etc.
+# Here, because of the for loops, some nodes might be on multipe lines.
+# We can't just get every line of the file and execute them one by one.
+# We parse the whole file at once and go through each node.
+# After the parsing, we execute everything and exit as soon as there is an error.
 func execute_file(file: SystemElement, options: Array, redirections: Array, interface: RichTextLabel = null) -> Dictionary:
 	_save_interface(interface)
-	var lines = file.content.split("\n")
-	var output := "" # the output will be the list of the output of each line
+	var result = execute(file.content, interface)
 	var cleared := false
-	for line in lines:
-		if line.begins_with("#"): # ignore comments (line starting with '#')
-			continue
+	var outputs := [] # we store all the outputs of the commands here
+	# ./script
+	# == prints everything on the screen
+	# ./script 1>result.txt
+	# == sends all the successfull outputs in result.txt, but prints all the errors on the screen
+	# ./script 1>result.txt 2>errors.txt
+	# == sends all the successfull outputs in result.txt, and all the errors in error.txt
+	for o in result.outputs:
+		if o.error == null and o.interface_cleared:
+			cleared = true
+			outputs = []
 		else:
-			var result := execute(line) # the line might be composed of several independant commands (separated by ";")
-			var error = null
-			for o in result.outputs:
-				if o.error != null:
-					error = o.error
-					break
-			if redirections[2] != null:
-				if error == null:
-					if redirections[2].type == Tokens.WRITING_REDIRECTION:
-						redirections[2].target.content = ""
-				else:
-					if redirections[2].type == Tokens.WRITING_REDIRECTION:
-						redirections[2].target.content = error
-					elif redirections[2].type == Tokens.APPEND_WRITING_REDIRECTION:
-						redirections[2].target.content += error
-					return {
-						"text": "",
-						"interface_cleared": false,
-						"error": null
-					}
-			if error != null:
-				return {
-					"error": error
-				}
-			else:
-				for o in result.outputs:
-					if o.interface_cleared:
-						cleared = true
-						output = "" # reset the output
-					else:
-						output += o.text
-	# The redirections must be treated after the end of the script,
-	# except for the port number 2 because it has to stop the execution
+			outputs.append(o)
+	if redirections[2] != null:
+		var all_errors := ""
+		var indexes_to_remove := [] # we'll remove all errors from the outputs array
+		for i in range(0, outputs.size()):
+			if outputs[i].error != null:
+				all_errors += outputs[i].error + "\n"
+				indexes_to_remove.append(i)
+		for i in range(indexes_to_remove.size() - 1, -1, -1):
+			outputs.remove(indexes_to_remove[i])
+		all_errors = all_errors.strip_edges()
+		if redirections[2].type == Tokens.WRITING_REDIRECTION:
+			redirections[2].target.content = all_errors
+		elif redirections[2].type == Tokens.APPEND_WRITING_REDIRECTION:
+			redirections[2].target.content += all_errors
 	if redirections[0] != null:
 		_write_to_redirection(redirections[0], "") # the weird behaviour described above, in `execute()`
 	if redirections[1] != null:
 		# If a standard output is used in the command,
 		# then it will receive the content of the combined outputs
+		# without the errors
+		var output := ""
+		var indexes_to_remove := []
+		for i in range(0, outputs.size()):
+			if outputs[i].error == null:
+				output += outputs[i].text
+				indexes_to_remove.append(i)
+		for i in range(indexes_to_remove.size() - 1, -1, -1):
+			outputs.remove(indexes_to_remove[i])
 		_write_to_redirection(redirections[1], output)
-		emit_signal("script_executed", file, output)
-		output = "" # the command (the execution of the script itself) won't output anything
-	elif interface != null and not output.empty():
-		emit_signal("script_executed", file, output)
+	emit_signal("script_executed", file, outputs)
 	return {
-		"text": output,
-		"interface_cleared": cleared,
-		"error": null
+		"outputs": outputs
+	}
+
+# Executes a for-loop node.
+# As a reminder, it looks something like this:
+# {
+#   "type": "for",
+#   "variable_name": String,
+#   "sequences": array of interpreted tokens (the variables got their value)
+#   "body": array of uninterpreted tokens
+# }
+func _execute_for_loop(command: Dictionary) -> Dictionary:
+	var outputs := []
+	var sequences := interpret_substitutions(interpret_variables(command.sequences))
+	if sequences.error != null:
+		return {
+			"outputs": [sequences]
+		}
+	for sequence in sequences.tokens:
+		runtime[0].set_variable(command.variable_name, sequence)
+		outputs.append_array(_execute_tokens(command.body).outputs)
+	return {
+		"outputs": outputs
 	}
 
 # Custom commands when using M99.
-# Exemple is : set 090 401
-# meaning set cell at pos 090 with value 401
+# Exemple is : set 90 401
+# meaning set cell at pos 90 with value 401
 func execute_m99_command(command_name: String, options: Array, interface: RichTextLabel = null) -> Dictionary:
 	_save_interface(interface)
 	if command_name == "man":
@@ -820,20 +961,26 @@ func execute_m99_command(command_name: String, options: Array, interface: RichTe
 			return manual
 		else:
 			return {
-				"output": "Le manuel a été ouvert.\nTapez la commande \"show\" pour en sortir.\n\n" + manual.output,
-				"error": null,
-				"interface_cleared": true
+				"outputs": [{
+					"error": null,
+					"interface_cleared": true,
+					"text": "Le manuel a été ouvert.\nTapez la commande \"show\" pour en sortir.\n\n" + manual.output
+				}]
 			}
 	elif command_name == "help":
 		return {
-			"output": build_help_page(m99.help_text, m99.COMMANDS),
-			"interface_cleared": true,
-			"error": null,
+			"outputs": [{
+				"error": null,
+				"interface_cleared": true,
+				"text": build_help_page(m99.help_text, m99.COMMANDS),
+			}]
 		}
 	var function = m99.COMMANDS[command_name] if command_name in m99.COMMANDS else null
 	if function == null or not function.reference.is_valid():
 		return {
-			"error": "Cette commande n'existe pas."
+			"outputs": [{
+				"error": "Cette commande n'existe pas."
+			}]
 		}
 	else:
 		var result = function.reference.call_func(options)
@@ -851,9 +998,11 @@ func execute_m99_command(command_name: String, options: Array, interface: RichTe
 			output += result.output
 		output += "\n"
 		return {
-			"output": output,
-			"interface_cleared": cleared,
-			"error": null,
+			"outputs": [{
+				"error": null,
+				"interface_cleared": cleared,
+				"text": output,
+			}]
 		}
 
 # Returns the SystemElement instance located at the given path.
@@ -979,10 +1128,13 @@ func interpret_redirections(redirections: Array) -> Array:
 			if interpretation.error != null:
 				error_handler.throw_error(interpretation.error)
 			else:
-				if interpretation.token == null:
+				if interpretation.tokens == null:
 					error_handler.throw_error("La redirection est ambiguë.")
 				else:
-					target = interpretation.token
+					if interpretation.tokens.size() > 1:
+						error_handler.throw_error("Trop de symboles donnés à la redirection.")
+					else:
+						target = interpretation.tokens[0]
 		if redirections[i].copied:
 			# If we have recursive substitution commands,
 			# we might have a situation where the descriptor is a PLAIN token.
@@ -993,8 +1145,11 @@ func interpret_redirections(redirections: Array) -> Array:
 				index = int(target.value)
 			else:
 				error_handler.throw_error("Descripteur invalide pour une des redirections. Il faut que ce soit un nombre : 0, 1 ou 2.")
-			result[redirections[i].port] = result[index]
-			target = result[index].target
+			if index > 2:
+				error_handler.throw_error("Le descripteur '" + str(index) + "' est trop grand.")
+			else:
+				result[redirections[i].port] = result[index]
+				target = result[index].target
 		else:
 			result[redirections[i].port] = redirections[i]
 		result[redirections[i].port].target = target
@@ -1079,7 +1234,7 @@ func echo(options: Array, _standard_input: String) -> Dictionary:
 	var to_display := ""
 	var line_break := true
 	for option in options:
-		if option.is_eol():
+		if option.is_eoi():
 			break
 		if option.is_flag():
 			if option.value == "n":
@@ -1178,11 +1333,11 @@ func tr_(options: Array, standard_input: String) -> Dictionary:
 
 func cat(options: Array, standard_input: String) -> Dictionary:
 	if options.size() > 1:
-		return { "error": "trop d'arguments" }
+		return { "error": "trop d'arguments." }
 	if options.size() == 0:
 		# something weird about the "cat" command...
 		# if no file is given as argument,
-		# but a file is given in the standard input,
+		# but something is given in the standard input,
 		# then the standard input becomes the output
 		return {
 			"output": standard_input,
@@ -1190,17 +1345,17 @@ func cat(options: Array, standard_input: String) -> Dictionary:
 		}
 	if not options[0].is_word():
 		return {
-			"error": "un chemin est attendu"
+			"error": "un chemin est attendu."
 		}
 	var path = PathObject.new(options[0].value)
 	if not path.is_valid:
 		return {
-			"error": "le chemin n'est pas valide"
+			"error": "le chemin n'est pas valide."
 		}
 	var element = get_file_element_at(path)
 	if element == null:
 		return {
-			"error": _display_error_or("la destination n'existe pas")
+			"error": _display_error_or("la destination n'existe pas.")
 		}
 	if not element.is_file():
 		return {
@@ -1208,7 +1363,7 @@ func cat(options: Array, standard_input: String) -> Dictionary:
 		}
 	if not element.can_read():
 		return {
-			"error": "Permission refusée"
+			"error": "Permission refusée."
 		}
 	var output = (element.content if not element.content.empty() else "Le fichier est vide.") + "\n"
 	emit_signal("file_read", element)

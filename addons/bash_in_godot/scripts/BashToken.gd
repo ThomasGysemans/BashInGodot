@@ -36,8 +36,8 @@ func is_word() -> bool:
 func is_pipe() -> bool:
 	return type == Tokens.PIPE
 
-func is_eol() -> bool:
-	return type == Tokens.EOL
+func is_eoi() -> bool:
+	return type == Tokens.EOI
 
 func is_descriptor() -> bool:
 	return type == Tokens.DESCRIPTOR
@@ -63,6 +63,12 @@ func is_equal_sign() -> bool:
 func is_variable() -> bool:
 	return type == Tokens.VARIABLE
 
+func is_keyword() -> bool:
+	return type == Tokens.KEYWORD
+
+func is_keyword_and_equals(keyword: String) -> bool:
+	return is_keyword() and value == keyword
+
 # (n)>&(m)
 func is_and() -> bool:
 	return type == Tokens.AND
@@ -72,6 +78,15 @@ func is_command_substitution() -> bool:
 
 func is_semicolon() -> bool:
 	return type == Tokens.SEMICOLON
+
+func is_newline() -> bool:
+	return type == Tokens.NL
+
+func is_line_separator() -> bool:
+	return is_newline() or is_semicolon()
+
+func is_valid_token_in_for_loop() -> bool:
+	return is_plain() or is_string() or is_variable() or is_command_substitution()
 
 func _to_string():
 	return "[" + type + ":" + str(value) + ("(" + str(metadata) + ")" if metadata != null else "") + "]"

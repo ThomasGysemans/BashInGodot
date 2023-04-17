@@ -43,6 +43,7 @@ A custom Bash parser was created to customise the behaviour of Bash and to make 
 |echo $HELLO|Variables are available. Define one with the syntax `NAME=VALUE` and use it with the syntax `$NAME`.|
 |echo "$FOO"|Strings are interpreted as one argument, and characters can be escaped, and double quotes act like they should.|
 |`cat $(echo file.txt) 1>$(echo copy.txt) 2>&$(echo 1)`|Command substitutions.|
+|`for i in 1 2 3 ; do echo $i ; done`|For loops|
 |./script|A script can be executed. The lines starting with `#` will be ignored.|
 |Permissions|Each file can have its own permissions. Use `chmod` with the digital representation of the permissions, or use the shortcut for each kind of permission (`chmod g-x .` for example).| 
 |History|The user can use previous commands and navigate through the history using the up and down arrow keys.|
@@ -57,6 +58,7 @@ A custom Bash parser was created to customise the behaviour of Bash and to make 
 |Background tasks|The symbol `&` to run tasks in the background is unknown.|
 |Home|The symbol `~` is unknown.|
 |Multi-user|Even though you can set the creator's name of a file, there is no way to properly log in. Besides, the permissions verifications are only done on the user side, meaning that the permissions granted to the group and to the others actually don't matter and are ignored.|
+|Conditions and functions|Anything that is as advanced as functions and conditions.|
 
 And some other things that i didn't quote.
 
@@ -127,36 +129,42 @@ The lexer step makes the interpretation of the command much easier.
 
 #### Parsing
 
-Basically, it takes as input the result of the lexer and returns an array of nodes. There are two types of nodes : `command` and `variable`. A variable affectation is very different from a command so it deserved its own node. A node is just a dictionary.
+Basically, it takes as input the result of the lexer and returns an array of nodes. There are three types of nodes : `command`, `variable` and `for`. A variable affectation is very different from a command so it deserved its own node, and `for` means a for loop. 
+
+A node is just a dictionary.
 
 Our example will give the following result:
 
 ```
 [
-  {
-    "type": "command",
-    "name": "echo",
-    "options": [
-      BashToken(type:FLAG, value:n),
-      BashToken(type:STRING, value:This is text.)
-    ],
-    "redirections": []
-  },
-  {
-    "type": "command",
-    "name": "cat",
-    "options": [],
-    "redirections": [
-      {
-        "port": 1,
-        "type": Tokens.WRITING_REDIRECTION,
-        "target": "result.txt",
-        "copied": false # true when the redirection is `2>&1` for example
-      }
-    ]
-  }
+  [
+    {
+      "type": "command",
+      "name": "echo",
+      "options": [
+        BashToken(type:FLAG, value:n),
+        BashToken(type:STRING, value:This is text.)
+      ],
+      "redirections": []
+    },
+    {
+      "type": "command",
+      "name": "cat",
+      "options": [],
+      "redirections": [
+        {
+          "port": 1,
+          "type": Tokens.WRITING_REDIRECTION,
+          "target": "result.txt",
+          "copied": false # true when the redirection is `2>&1` for example
+        }
+      ]
+    }
+  ]
 ]
 ```
+
+This is a 2D array because the first array contains all the commands that depend on the previous one. A new array is made when two commands are separated by a semicolon for example.
 
 #### Interpretation
 
@@ -257,7 +265,7 @@ From SystemElement, you may want to use these methods:
 |`is_hidden() -> bool`|`true` if the name starts with an underscore.|
 |`rename(name: String) -> void`|Renames the element.|
 |`move_inside_of(abs_path: String or PathObject) -> self`|Moves the element elsewhere along with its children.|
-|`equals(other: SystemElement) -> bool`|Returns `true` if the element equals the other. The condition is based on the type of each element and their absolute path.|
+|`equals(other: SystemElement) -> bool`|Returns `true` if the element equals the other.|
 |`set_permissions(p: String) -> bool`|Returns `true` if the change of permissions went successfully. If the given permissions are not valid, it will return `false`.|
 |`set_specific_permission(p: String) -> bool`|Sets a permission for the user, the group or the others. This method is called when setting the permissions using the simplified syntax (example: `g-w` removes `w` from the group).|
 |`build_permissions_string() -> String`|Returns an easy-to-read representation of the permissions granted to the file. For example, the default permissions of a folder are `drwxr-xr-x` (755).|
@@ -385,7 +393,7 @@ Customise it with these methods:
 |`set_ip_address(ip: String) -> bool`|In order to use the `ping` command, the Terminal needs to have an IP address. Returns `false` if the IP is not valid.|
 |`set_allowed_commands(commands: Array) -> void`|Define what commands are allowed. See [Allowing or Disabling Commands](#allowing-or-disabling-commands) for more details.|
 |`forbid_commands(commands: Array) -> void`|Forbid commands. See [Allowing or Disabling Commands](#allowing-or-disabling-commands) for more details.|
-|`execute(input: String, interface: RichTextLabel = null) -> Dictionary`|Executes the given command. If the command is a script execution, then it executes it. If the command is a M99 command, it will execute it too (if it was started, obviously). Returns a dictionary with key `error` which contains an explanation of what went wrong, otherwise `error` is null and the return value is a dictionary with the following keys: `output` (what needs to be printed on the interface) and `interface_cleared` (a boolean that says `true` if the `clear` command was used).|
+|`execute(input: String, interface: RichTextLabel = null) -> Dictionary`|Executes the given command. If the command is a script execution, then it tries to execute it. If the command is a M99 command, it will execute it too (if it was started, obviously). Returns a dictionary with key `outputs` which is an array. Each array element represents the result of an independent command whose output should be printed to the screen, it is a dictionary with key `error` which contains an explanation of what went wrong, otherwise `error` is null and the return value is a dictionary with the following keys: `text` (what needs to be printed to the interface) and `interface_cleared` (a boolean that says `true` if the `clear` command was used).|
 |`execute_file(file: SystemElement, options: Array, interpreted_redirections: Array, interface: RichTextLabel = null) -> Dictionary`|Executes a script. You should use the `execute` command for this unless you know exactly what you're doing.|
 |`execute_m99_command(command_name: String, options: Array, interface: RichTextLabel = null) -> Dictionary`|Executes a M99 command. Same as `execute_file` you should use `execute` instead.|
 |`get_file_element_at(path: PathObject)`|Gets a file element according to the given path. If an error occured, the `error_handler` property will have an error (`error_handler.has_error` set to `true`). If the destination doesn't exist or if an error occured, it will return `null`, otherwise an instance of `SystemElement`.|
@@ -473,7 +481,7 @@ Emitted when a variable is created, "name" and "value" are strings, "is_new" is 
 
 - `script_executed (script, output)`
 
-Emitted when a script was executed. `script` is the instance of SystemElement of the script, `output` is the complete output printed onto the interface.
+Emitted when a script was executed. `script` is the instance of `SystemElement` of the script, `output` is the output printed to the interface (it does not contain what's been redirected).
 
 - `help_asked`
 

@@ -126,11 +126,28 @@ func move_inside_of(new_absolute_path):
 		child.move_inside_of(self.base_dir + "/" + child.absolute_path.parent)
 	return self
 
+# Checks if two elements are equal.
+# If their type is different, it returns false.
+# If their absolute path is different, it returns false.
+# If the elements are files, then it returns true if their content is the same.
+# If the elements are folders, the functions becomes recursive and is applied on each child.
 func equals(another: SystemElement) -> bool:
+	if self == another: return true
 	if another == null: return false
-	if self.type == another.type and self.absolute_path.equals(another.absolute_path):
-		return true
-	return false
+	if self.type != another.type: return false
+	if !self.absolute_path.equals(another.absolute_path): return false
+	if self.is_file():
+		return self.content == another.content
+	else:
+		var found_equal := false
+		for child1 in self.children:
+			for child2 in another.children:
+				if child1.equals(child2):
+					found_equal = true
+					break
+			if not found_equal:
+				return false
+	return true
 
 # Sets the permissions using the octal format.
 # Example is: chmod 777 file.txt

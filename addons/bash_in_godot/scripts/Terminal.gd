@@ -469,7 +469,7 @@ static func build_help_page(text: String, commands: Dictionary) -> String:
 	var max_synopsis_size := 40
 	var max_description_size := 60
 	for command in commands:
-		if not commands[command].allowed:
+		if "allowed" in commands[command] and not commands[command].allowed:
 			continue
 		var synopsis = replace_bbcode(commands[command].manual.synopsis[0], "")
 		var description = replace_bbcode(commands[command].manual.name, "")

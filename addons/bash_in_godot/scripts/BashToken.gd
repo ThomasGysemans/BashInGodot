@@ -88,5 +88,9 @@ func is_line_separator() -> bool:
 func is_valid_token_in_for_loop() -> bool:
 	return is_plain() or is_string() or is_variable() or is_command_substitution()
 
+func equals(another: BashToken) -> bool:
+	if self == another: return true
+	return self.type == another.type and self.value == another.value and self.metadata == another.metadata
+
 func _to_string():
 	return "[" + type + ":" + str(value) + ("(" + str(metadata) + ")" if metadata != null else "") + "]"

@@ -151,7 +151,7 @@ func read(input: String) -> Array:
 				error = "Erreur de syntaxe : une chaine de caractères n'a pas été fermée."
 				return []
 			else:
-				pos += parsed_string.value.length() + 2
+				pos += parsed_string.size
 			result.append(BashToken.new(Tokens.STRING, parsed_string.value, { "quote": parsed_string.quote }))
 		elif input[pos] == "|":
 			result.append(BashToken.new(Tokens.PIPE, '|'))
@@ -251,22 +251,35 @@ func _read_string(content: String):
 	var quote := ""
 	var result := ""
 	var closed := false
+	var is_escaping := false
 	while cursor < content.length():
 		if _is_char_quote(content[cursor]):
 			if content[cursor] == quote:
-				if content[cursor - 1] != "\\":
+				if not is_escaping:
 					closed = true
 					break
 			else:
 				if quote.empty():
 					quote = content[cursor]
-		if content[cursor] != "\\":
-			result += content[cursor]	
+					cursor += 1
+					continue
+		if content[cursor] == "\\":
+			if is_escaping:
+				# For some reason, "\n" stays as it is,
+				# but "\\" is transformed into a single "\"
+				cursor += 1
+				is_escaping = false
+				continue
+			is_escaping = true
+		else:
+			is_escaping = false
+		result += content[cursor]
 		cursor += 1
 	return {
-		"value": result.strip_edges().substr(1, result.length() - 1),
+		"value": result,
 		"string_closed": closed,
-		"quote": quote
+		"quote": quote,
+		"size": cursor
 	}
 
 # When we are executing this function, it's because we've just seen a number (0, 1 or 2).

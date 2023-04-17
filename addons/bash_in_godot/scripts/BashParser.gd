@@ -104,6 +104,8 @@ func parse(input) -> Array:
 	else:
 		error = "Donnée invalides pour le parsing du code."
 		return []
+	if tokens_list.size() == 1 and tokens_list[0].is_eoi():
+		return []
 	var i := 0
 	var e := 0
 	var commands := [[]]
@@ -144,6 +146,7 @@ func parse(input) -> Array:
 
 func _parse_command(list: Array):
 	if list.empty() or list[0].is_eoi():
+		print("list = " + str(list))
 		return "Erreur de syntaxe : bash attendait une commande mais il n'y a rien."
 	if list[0].type != Tokens.PLAIN and list[0].type != Tokens.KEYWORD:
 		return "Erreur de syntaxe : le symbole '" + str(list[0].value) + "' n'était pas attendu"

@@ -22,13 +22,16 @@ func reset() -> void:
 # would give [PLAIN, STRING, PIPE, PLAIN, PLAIN, PLAIN]
 # the very first item of the list is the name of a command, and the first "PLAIN" after a PIPE is also a command
 func read(input: String) -> Array:
-	if input.empty():
-		return [BashToken.new(Tokens.EOI, null)]
 	var pos := 0
 	var result := []
 	var length := input.length()
 	var can_accept_variable := true # a variable affectation must be the very first thing on the line, but note that "a=5 b=6" is possible
 	while pos < length:
+		if input[pos] == "#":
+			pos += 1
+			while pos < length and input[pos] != "\n":
+				pos += 1
+			continue
 		if input[pos] == " " or input[pos] == "\t":
 			pos += 1
 			continue

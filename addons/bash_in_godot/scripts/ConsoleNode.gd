@@ -28,7 +28,7 @@ func _ready():
 	if pid < 0:
 		var rng = RandomNumberGenerator.new()
 		rng.randomize()
-		pid = rng.randi_range(1000, 10000)
+		pid = rng.randi_range(100, 10000)
 	var node := get_node_or_null(reference_node)
 	var system := System.new([])
 	var allowed_commands := []

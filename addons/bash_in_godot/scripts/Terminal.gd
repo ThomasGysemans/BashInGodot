@@ -405,6 +405,39 @@ var COMMANDS := {
 			]
 		}
 	},
+	"cut": {
+		"allowed": true,
+		"reference": funcref(self, "cut"),
+		"manual": {
+			"name": "cut - sélectionne une portion précise de chaque ligne d'un fichier.",
+			"synopsis": [
+				"[b]cut[/b] [b]-c[/b] [u]liste[/u] [[u]fichier[/u]]",
+				"[b]cut[/b] [b]-f[/b] [u]liste[/u] [b]-d[/b] [u]délimiteur[/u] [[u]fichier[/u]]"
+			],
+			"description": "La commande va couper chaque ligne de manière à afficher une portion précise. Sélectionnez un groupe de caractères avec l'option '-c', ou des champs particuliers via le délimiteur donné par l'option '-d' (qui est par défaut TAB : '\\t'). Spécifiez quels champs sélectionner avec '-f'. Sélectionnez une liste de champs (les champs 2 et 5 par exemple) en écrivant une virgule : '2,5'. Sélectionnez un intervalle de x à y en écrivant : x-y.",
+			"options": [
+				{
+					"name": "c",
+					"description": "Sélectionne des caractères."
+				},
+				{
+					"name": "f",
+					"description": "Sélectionne un champs par un délimiteur particulier donné par l'option '-d'."
+				},
+				{
+					"name": "d",
+					"description": "Définis un délimiteur particulier avec lequel désigner des champs à sélectionner."
+				}
+			],
+			"examples": [
+				"cat fichier.csv | cut -c 5 # sélectionne le 5e caractère",
+				"cat fichier.csv | cut -c 5,10 # sélectionne le 5e et le 10e caractère",
+				"cat fichier.csv | cut -c 5-10 # sélectionne les caractères de la position 5 à 10",
+				"cat fichier.csv | cut -f 2 -d ',' # sélectionne le 2e champs séparé par une virgule",
+				"cat fichier.csv | cut -f 2,3,5-8 -d ',' # sélectionne le 2e et 3e champs, puis du 5e au 8e."
+			]
+		}
+	},
 	"startm99": {
 		"allowed": true,
 		"reference": funcref(self, "startm99"),
@@ -448,13 +481,13 @@ static func build_manual_page_using(manual: Dictionary, max_size: int) -> String
 	output += "[b]NOM[/b]\n\t" + manual.name + "\n\n"
 	output += "[b]SYNOPSIS[/b]\n"
 	for synopsis in manual.synopsis:
-		output += "\t" + synopsis
-	output += "\n\n[b]DESCRIPTION[/b]\n"
+		output += "\t" + synopsis + "\n"
+	output += "\n[b]DESCRIPTION[/b]\n"
 	var description_lines := cut_paragraph(manual.description, max_size)
 	for line in description_lines:
 		output += "\t" + line + "\n"
 	if not manual.options.empty():
-		output += "\n[b]OPTIONS[/b]\n"
+		output += "[b]OPTIONS[/b]\n"
 		for option in manual.options:
 			output += "\t[b]" + option.name + "[/b]\n"
 			output += "\t\t" + option.description + "\n"
@@ -717,17 +750,19 @@ func _execute_tokens(tokens: Array, interface: RichTextLabel = null) -> Dictiona
 							if command_redirections[2].type == Tokens.WRITING_REDIRECTION:
 								command_redirections[2].target.content = ""
 						else:
-							emit_signal("error_thrown", command, result.error)
 							if command_redirections[2].type == Tokens.WRITING_REDIRECTION:
 								command_redirections[2].target.content = "Commande '" + command.name + "' : " + result.error
 							elif command_redirections[2].type == Tokens.APPEND_WRITING_REDIRECTION:
 								command_redirections[2].target.content += "Commande '" + command.name + "' : " + result.error
-							break # if there is an error, we have to stop the program anyway
+							emit_signal("error_thrown", command, result.error)
+							standard_input = ""
+							break # if there is an error, we have to stop the command anyway
 					if result.error != null:
 						emit_signal("error_thrown", command, result.error)
 						outputs.append({
 							"error": "Commande '" + command.name + "' : " + result.error
 						})
+						standard_input = ""
 						break
 					else:
 						emit_signal("command_executed", command, result.output)
@@ -758,7 +793,7 @@ func _execute_tokens(tokens: Array, interface: RichTextLabel = null) -> Dictiona
 			else: # the line is a variable affectation
 				var is_new = runtime[0].set_variable(command.name, command.value) # command.value is a BashToken
 				emit_signal("variable_set", command.name, command.value.value, is_new)
-		if not standard_input.empty():
+		if cleared or not standard_input.empty():
 			emit_signal("interface_changed", standard_input)
 			outputs.append({
 				"error": null,
@@ -2190,6 +2225,261 @@ func tail(options: Array, standard_input: String) -> Dictionary:
 	var begin = max(lines.size() - check.n, 0) if check.tail_shift == null else max(check.tail_shift - 1, 0)
 	for e in range(begin, lines.size()):
 		output += lines[e] + "\n"
+	return {
+		"output": output,
+		"error": null
+	}
+
+# Takes as input "2-4" and returns [2, 5].
+# If the end is not specified, then it returns [beginning, null].
+# The beginning cannot be null.
+func _read_interval(option: String) -> Dictionary:
+	var dash: int = option.find('-')
+	var begin: String = option.left(dash) # cannot be empty
+	var end: String = option.right(dash + 1)
+	var begin_integer: int
+	var ending_integer: int
+	if end.empty():
+		if not begin.is_valid_integer():
+			return {
+				"error": "l'intervalle '" + option + "' n'est pas valide."
+			}
+		begin_integer = int(begin) - 1
+		if begin_integer < 0:
+			return {
+				"error": "un intervalle ne peut inclure 0."
+			}
+	else:
+		if not begin.is_valid_integer() or not end.is_valid_integer():
+			return {
+				"error": "l'intervalle '" + option + "' n'est pas valide."
+			}
+		begin_integer = int(begin) - 1
+		ending_integer = int(end) - 1
+		if begin_integer < 0 or ending_integer < 0:
+			return {
+				"error": "un intervalle ne peut inclure 0."
+			}
+	return {
+		"error": null,
+		"interval": [begin_integer, null if end.empty() else ending_integer]
+	}
+
+func _get_duplicates(a: Array) -> Array:
+	if a.size() < 2:
+		return []
+	var seen = {}
+	seen[a[0]] = true
+	var duplicate_indexes = []
+	for i in range(1, a.size()):
+		var v = a[i]
+		if seen.has(v):
+			# Duplicate!
+			duplicate_indexes.append(i)
+		else:
+			seen[v] = true
+	return duplicate_indexes
+
+# Reads the input "2,3,5-10"
+# which means "select element 2 and 3, then from 5 to 10".
+# This function returns a dictionary:
+# {
+#   "list": [1, 2, 4, 5, 6, 7, 8, 9],
+#   "error": String or null
+# }
+# The duplicates are removed, and the array is sorted.
+func _read_cut_range(option: String, max_value: int) -> Dictionary:
+	var elements := option.split(',')
+	var list := []
+	var integer: int
+	for element in elements:
+		if element.find('-') != -1:
+			var check := _read_interval(element)
+			if check.error != null:
+				return check
+			for j in range(check.interval[0], max_value if check.interval[1] == null else (check.interval[1] + 1)):
+				list.append(j)
+		else:
+			if not element.is_valid_integer():
+				return {
+					"error": "liste invalide."
+				}
+			integer = int(element) - 1
+			if integer < 0:
+				return {
+					"error": "une liste ne peut inclure 0."
+				}
+			list.append(integer)
+	var duplicate_indexes := _get_duplicates(list)
+	for i in range(duplicate_indexes.size() - 1, -1, -1):
+		list.remove(duplicate_indexes[i])
+	list.sort()
+	return {
+		"list": list,
+		"error": null
+	}
+
+func cut(options: Array, standard_input: String) -> Dictionary:
+	var output := ""
+	var selection = null
+	var is_c := false
+	var is_f := false
+	var d := "" # if -d is used, the 'd' variable will store the delimiter
+	var input := standard_input
+	var number_of_options := options.size()
+	var i := 0
+	while i < number_of_options:
+		if options[i].is_flag():
+			match options[i].value:
+				"c":
+					if is_f:
+						return {
+							"error": "impossible d'utiliser les options '-f' et '-c' en même temps."
+						}
+					if not d.empty():
+						return {
+							"error": "impossible d'utiliser les options '-d' et '-c' en même temps."
+						}
+					i += 1
+					if i >= number_of_options:
+						return {
+							"error": "une valeur est attendue après l'option '-c'."
+						}
+					if not options[i].is_word():
+						return {
+							"error": "une valeur numérique ou un intervalle sont attendus après l'option '-c'."
+						}
+					selection = options[i].value
+					is_c = true
+				"f":
+					if is_c:
+						return {
+							"error": "impossible d'utiliser les options '-c' et '-f' en même temps."
+						}
+					i += 1
+					if i >= number_of_options:
+						return {
+							"error": "une valeur est attendue après l'option '-f'."
+						}
+					if not options[i].is_word():
+						return {
+							"error": "une valeur numérique ou un intervalle sont attendus après l'option '-f'."
+						}
+					selection = options[i].value
+					is_f = true
+				"d":
+					if is_c:
+						return {
+							"error": "impossible d'utiliser les options '-c' et '-d' en même temps."
+						}
+					i += 1
+					if i >= number_of_options:
+						return {
+							"error": "une valeur est attendue après l'option '-d'."
+						}
+					if not options[i].is_word():
+						return {
+							"error": "un pattern est attendu après l'option '-d'."
+						}
+					d = options[i].value
+				_:
+					return {
+						"error": "l'option '-" + options[i].value + "' est inconnue."
+					}
+		else:
+			if not options[i].is_word():
+				return {
+					"error": "option inattendue : '" + str(options[i].value) + "'."
+				}
+			var path := PathObject.new(options[i].value)
+			if not path.is_valid:
+				return {
+					"error": "le chemin vers le fichier n'est pas valide."
+				}
+			var element = get_file_element_at(path)
+			if element == null:
+				return {
+					"error": _display_error_or("la destination n'existe pas.")
+				}
+			if not element.is_file():
+				return {
+					"error": "impossible de lire un dossier."
+				}
+			if not element.can_read():
+				return {
+					"error": "permission refusée."
+				}
+			if (i + 1) < number_of_options:
+				return {
+					"error": "le fichier devrait être la dernière option donnée à la commande."
+				}
+			input = element.content
+			break
+		i += 1
+	if not is_c and not is_f:
+		return {
+			"error": "aucune option donnée !"
+		}
+	if selection == null:
+		return {
+			"error": "aucune sélection donnée !"
+		}
+	if is_f and d.empty():
+		d = "\t"
+	var lines := input.split("\n", false)
+	if is_c:
+		# Before reading the selection
+		# we have to know what's the maximum,
+		# in case the user writes "5-" for example.
+		# However if the input is empty, we can't do that.
+		# If the selection has an error, we have to return the error in priority.
+		# Setting the max to a pointless constant allows the `_read_cut_range` to be executed.
+		var max_line_length: int
+		if lines.empty():
+			max_line_length = 1
+		else:
+			max_line_length = lines[0].length()
+			for j in range(1, lines.size()):
+				if lines[j].length() > max_line_length:
+					max_line_length = lines[i].length()
+		var selections := _read_cut_range(selection, max_line_length)
+		if selections.error != null:
+			return selections
+		for line in lines:
+			for index in selections.list:
+				if index >= line.length():
+					break
+				else:
+					output += line[index]
+			output += "\n"
+	else:
+		# Same as above, we have to execute _read_cut_range() even if the input is empty.
+		# Sounds weird, but if the selection has an error, it must be told to the user in priority.
+		# Executing this function is the only way to know that.
+		var max_count: int
+		var splits: Array
+		if lines.empty():
+			max_count = 1
+		else:
+			splits = [lines[0].split(d, true)]
+			max_count = splits[0].size()
+			for j in range(1, lines.size()):
+				splits.append(lines[j].split(d, true))
+				if splits[j].length() > max_count:
+					max_count = splits[j].value
+		var selections := _read_cut_range(selection, max_count)
+		if selections.error != null:
+			return selections
+		for line_groups in splits:
+			if line_groups.size() == 1: # if there is only one element, it means there is not delimiter. The only element is therefore the line itself
+				output += line_groups[0] + "\n"
+			else:
+				for index in selections.list:
+					if index >= line_groups.size():
+						break
+					else:
+						output += line_groups[index]
+				output += "\n"
 	return {
 		"output": output,
 		"error": null

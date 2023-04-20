@@ -139,6 +139,9 @@ func _on_command_entered(new_text: String):
 	if not terminal.m99.started:
 		_print_command(new_text)
 	var result := terminal.execute(new_text, interface)
+	# It is possible that there are not outputs.
+	# It happens when the command is just a variable declaration for example.
+	# Note that the `clear` command will produce an output anyway, but with an empty text.
 	for output in result.outputs:
 		if output.error != null:
 			_print_error(output.error)

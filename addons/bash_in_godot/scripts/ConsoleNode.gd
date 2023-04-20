@@ -87,6 +87,9 @@ func _process(_delta):
 			history_index += 1
 			prompt.clear()
 	if Input.is_action_just_pressed("autocompletion"):
+		# we don't want autocompletion when the user is editing a file using nano
+		if terminal.edited_file != null:
+			return
 		prompt.grab_focus()
 		if not prompt.text.empty():
 			var possibilites := [] # array of string containing the possible names to autocomplete with

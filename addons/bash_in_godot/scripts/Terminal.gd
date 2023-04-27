@@ -738,6 +738,7 @@ func _execute_tokens(tokens: Array, interface: RichTextLabel = null) -> Dictiona
 							"error": "Commande '" + command.name + "' : " + error_handler.clear()
 						})
 						break
+					command.redirections = command_redirections
 					for i in range(0, command_redirections.size()):
 						if command_redirections[i] != null and command_redirections[i].target == null:
 							outputs.append({

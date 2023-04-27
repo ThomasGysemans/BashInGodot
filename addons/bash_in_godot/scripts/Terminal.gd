@@ -144,17 +144,22 @@ var COMMANDS := {
 		"reference": funcref(self, "ls"),
 		"manual": {
 			"name": "ls - liste le contenu d'un dossier.",
-			"synopsis": ["[b]ls[/b] [[b]-a[/b]] [[u]dossier[/u]]"],
+			"synopsis": ["[b]ls[/b] [[b]-a[/b]] [[b]-l[/b]] [[u]dossier[/u]]"],
 			"description": "La commande va lister le contenu des dossiers, en colorant en vert les dossiers, et en blanc les fichiers. Par défaut, les fichiers et dossiers cachés (c'est-à-dire ceux préfixés par un point) ne serront pas affichés. Pour les afficher, utilisez l'option -a.",
 			"options": [
 				{
 					"name": "-a",
 					"description": "Affiche les fichiers cachés (ceux préfixés d'un point)"
+				},
+				{
+					"name": "-l",
+					"description": "Affiche les fichiers et dossiers contenus dans la cible avec des données supplémentaires."
 				}
 			],
 			"examples": [
 				"ls folder",
-				"ls -a folder"
+				"ls -a folder",
+				"ls -l ."
 			]
 		}
 	},

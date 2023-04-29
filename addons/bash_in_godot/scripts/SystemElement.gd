@@ -130,7 +130,7 @@ func move_inside_of(new_absolute_path):
 # If their type is different, it returns false.
 # If their absolute path is different, it returns false.
 # If the elements are files, then it returns true if their content is the same.
-# If the elements are folders, the functions becomes recursive and is applied on each child.
+# If the elements are folders, the function becomes recursive and is applied on each child.
 func equals(another: SystemElement) -> bool:
 	if self == another: return true
 	if another == null: return false
@@ -139,6 +139,7 @@ func equals(another: SystemElement) -> bool:
 	if self.is_file():
 		return self.content == another.content
 	else:
+		if self.children.size() != another.children.size(): return false
 		var found_equal := false
 		for child1 in self.children:
 			for child2 in another.children:
@@ -147,6 +148,7 @@ func equals(another: SystemElement) -> bool:
 					break
 			if not found_equal:
 				return false
+			found_equal = false
 	return true
 
 # Sets the permissions using the octal format.

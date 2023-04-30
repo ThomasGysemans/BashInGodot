@@ -999,7 +999,9 @@ func execute_m99_command(command_name: String, options: Array, interface: RichTe
 	if command_name == "man":
 		var manual = man(options, "")
 		if manual.error != null:
-			return manual
+			return {
+				"outputs": [manual]
+			}
 		else:
 			return {
 				"outputs": [{
@@ -1028,7 +1030,9 @@ func execute_m99_command(command_name: String, options: Array, interface: RichTe
 		var cleared := false
 		var output := ""
 		if result.error != null:
-			return result
+			return {
+				"outputs": [result]
+			}
 		if command_name == "exit":
 			output = "M99 a été arrêté."
 			cleared = true

@@ -39,7 +39,7 @@ func _ready():
 		if "dns" in node:
 			dns_config = node.dns
 		# if an ip address is defined here using the export, the one from the node is ignored
-		if "ip_address" in node and not ip_address.empty():
+		if "ip_address" in node and ip_address.empty():
 			ip_address = node.ip_address
 		# if a max paragraph size is defined using the export variable, it will override the one defined in the node.
 		# If none are given, nor valid, then the default one from the Terminal scene is used.

@@ -617,7 +617,7 @@ func interpret_substitutions(options: Array) -> Dictionary:
 # However, it's useful for the substitutions that may be in the redirections.
 # Returns a dictionary { "error": String or null, "tokens": array of PLAIN BashTokens, or just null if there is not output } 
 func interpret_one_substitution(token: BashToken) -> Dictionary:
-	var execution := execute(token.value)
+	var execution := execute(token.value, null, false)
 	# Because the execution possibly have multiple independant commands
 	# we have to make only one token out of everything.
 	var one_line_output := ""
@@ -642,7 +642,7 @@ func interpret_one_substitution(token: BashToken) -> Dictionary:
 # The command substitutions will be recursively executed using `interpret_substitutions` on the input.
 # If the commands fails, then this function will return { "error": String }.
 # Otherwise, it will return { "error": null, "output": String, "interface_cleard": bool } 
-func execute(input: String, interface: RichTextLabel = null) -> Dictionary:
+func execute(input: String, interface: RichTextLabel = null, can_change_interface := true) -> Dictionary:
 	interface = _save_interface(interface)
 	var lexer := BashLexer.new(input)
 	if not lexer.error.empty():
@@ -651,9 +651,9 @@ func execute(input: String, interface: RichTextLabel = null) -> Dictionary:
 				"error": lexer.error
 			}]
 		}
-	return _execute_tokens(lexer.tokens_list, interface)
+	return _execute_tokens(lexer.tokens_list, interface, can_change_interface)
 
-func _execute_tokens(tokens: Array, interface: RichTextLabel = null) -> Dictionary:
+func _execute_tokens(tokens: Array, interface: RichTextLabel = null, can_change_interface := true) -> Dictionary:
 	var parser := BashParser.new(runtime[0], pid)
 	var parsing := parser.parse(tokens)
 	if not parser.error.empty():
@@ -800,7 +800,8 @@ func _execute_tokens(tokens: Array, interface: RichTextLabel = null) -> Dictiona
 				var is_new = runtime[0].set_variable(command.name, command.value) # command.value is a BashToken
 				emit_signal("variable_set", command.name, command.value.value, is_new)
 		if cleared or not standard_input.empty():
-			emit_signal("interface_changed", standard_input)
+			if can_change_interface:
+				emit_signal("interface_changed", standard_input)
 			outputs.append({
 				"error": null,
 				"text": standard_input,
@@ -986,7 +987,11 @@ func _execute_for_loop(command: Dictionary) -> Dictionary:
 		}
 	for sequence in sequences.tokens:
 		runtime[0].set_variable(command.variable_name, sequence)
-		outputs.append_array(_execute_tokens(command.body).outputs)
+		outputs.append_array(_execute_tokens(command.body, null, false).outputs)
+	var oneline_output = ""
+	for output in outputs:
+		oneline_output += output.text
+	emit_signal("interface_changed", oneline_output)
 	return {
 		"outputs": outputs
 	}

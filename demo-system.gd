@@ -35,6 +35,13 @@ var dns := DNS.new([
 # It is optional, but if not given, the command "ping" will throw an error.
 var ip_address := "192.168.10.2"
 
+var runtime := BashContext.new([
+	{
+		"name": "HELLO",
+		"token": BashToken.new(Tokens.PLAIN, "World")
+	}
+])
+
 # The maximum number of characters printed on the same line for a paragraph.
 # Use this if you have several consoles on the same screen and if you want
 # them to share the same property.

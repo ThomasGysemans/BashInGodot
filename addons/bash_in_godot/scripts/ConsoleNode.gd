@@ -33,6 +33,7 @@ func _ready():
 	var system := System.new([])
 	var allowed_commands := []
 	var forbidden_commands := []
+	var initial_context = null
 	if node != null:
 		if "system" in node:
 			system = node.system
@@ -49,6 +50,8 @@ func _ready():
 			allowed_commands = node.allowed_commands
 		if "forbidden_commands" in node:
 			forbidden_commands = node.forbidden_commands
+		if "runtime" in node:
+			initial_context = node.runtime
 	terminal = Terminal.new(pid, system, editor)
 	terminal.set_dns(dns_config)
 	if max_paragraph_size > 0:
@@ -59,6 +62,8 @@ func _ready():
 		terminal.set_allowed_commands(allowed_commands)
 	if not forbidden_commands.empty():
 		terminal.forbid_commands(forbidden_commands)
+	if initial_context != null:
+		terminal.runtime[0] = initial_context
 	add_child(interface)
 	add_child(prompt)
 	add_child(editor)

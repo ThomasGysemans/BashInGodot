@@ -8,6 +8,15 @@ class_name BashContext
 # (so it's the value that is returned when the variable doesn't exist).
 var context := []
 
+func _init(initial_context: Array = []) -> void:
+	if not initial_context.empty():
+		# If the initial_context contains an invalid entry,
+		# the whole context is ignored.
+		for entry in initial_context:
+			if (not "name" in entry) or (not entry.name is String) or (not "token" in entry) or (not entry.token is BashToken):
+				return
+		context.append_array(initial_context)
+
 # Sets the value of a variable.
 # If it doesn't exist, it's created.
 # Returns true if the variable was created, false otherwise.

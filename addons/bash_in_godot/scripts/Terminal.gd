@@ -1004,9 +1004,15 @@ func _execute_for_loop(command: Dictionary) -> Dictionary:
 		runtime[0].set_variable(command.variable_name, sequence)
 		outputs.append_array(_execute_tokens(command.body, null, false).outputs)
 	var oneline_output = ""
+	var has_error := false
 	for output in outputs:
-		oneline_output += output.text
-	emit_signal("interface_changed", oneline_output)
+		if output.error != null:
+			has_error = true
+			break
+		else:
+			oneline_output += output.text
+	if not has_error:
+		emit_signal("interface_changed", oneline_output)
 	return {
 		"outputs": outputs
 	}

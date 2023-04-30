@@ -196,6 +196,12 @@ func read(input: String) -> Array:
 				can_accept_variable = false
 				continue
 			if identifier.token.value in Tokens.KEYWORDS:
+				# The `do` keyword can accept variable declarations in its body.
+				# As soon as there is another keyword, we set can_accept_variable to false.
+				if identifier.token.value == "do":
+					can_accept_variable = true
+				else:
+					can_accept_variable = false
 				result.append(BashToken.new(Tokens.KEYWORD, identifier.token.value))
 				pos = identifier.pos
 				continue

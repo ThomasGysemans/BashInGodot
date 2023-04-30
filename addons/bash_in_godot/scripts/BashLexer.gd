@@ -214,6 +214,8 @@ func read(input: String) -> Array:
 							else:
 								pos += string.value.length() + 2
 							result.append(BashToken.new(Tokens.STRING, string.value, { "quote": string.quote }))
+						elif input[pos] == '$':
+							continue
 						else:
 							var value = _read_identifier(input, pos, length, true)
 							result.append(value.token)

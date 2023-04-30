@@ -797,8 +797,23 @@ func _execute_tokens(tokens: Array, interface: RichTextLabel = null, can_change_
 			elif command.type == "for":
 				outputs.append_array(_execute_for_loop(command).outputs)
 			else: # the line is a variable affectation
-				var is_new = runtime[0].set_variable(command.name, command.value) # command.value is a BashToken
-				emit_signal("variable_set", command.name, command.value.value, is_new)
+				var variable_value = command.value # command.value is a BashToken
+				if variable_value.type == Tokens.SUBSTITUTION:
+					var interpretation = interpret_one_substitution(variable_value)
+					if interpretation.error != null:
+						outputs.append(interpretation)
+					var string_value := ""
+					for token in interpretation.tokens:
+						string_value += token.value.strip_edges() + " "
+					variable_value = BashToken.new(Tokens.PLAIN, string_value)
+				elif variable_value.type == Tokens.VARIABLE:
+					var interpretation := interpret_variables([variable_value])
+					var string_value := ""
+					for token in interpretation:
+						string_value += token.value.strip_edges() + " "
+					variable_value = BashToken.new(Tokens.PLAIN, string_value)
+				var is_new = runtime[0].set_variable(command.name, variable_value)
+				emit_signal("variable_set", command.name, variable_value.value, is_new)
 		if cleared or not standard_input.empty():
 			if can_change_interface:
 				emit_signal("interface_changed", standard_input)

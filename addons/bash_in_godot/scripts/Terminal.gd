@@ -2016,6 +2016,7 @@ func nano(options: Array, _standard_input: String) -> Dictionary:
 			"error": "permission refusée"
 		}
 	edited_file = element
+	(nano_editor as WindowDialog).get_node("TextEdit").text = edited_file.content
 	nano_editor.popup()
 	return {
 		"output": "",

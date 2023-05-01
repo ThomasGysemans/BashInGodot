@@ -1097,7 +1097,7 @@ func get_pwd_file_element() -> SystemElement:
 	return result
 
 func get_parent_element_from(path: PathObject) -> SystemElement:
-	return get_file_element_at(PathObject.new(path.parent) if path.parent != null else PWD)
+	return get_file_element_at(PathObject.new(path.base_dir) if path.base_dir != null else PWD)
 
 func copy_element(e: SystemElement) -> SystemElement:
 	return SystemElement.new(e.type, e.filename, e.base_dir, e.content, copy_children_of(e), user_name, group_name, e.permissions)
@@ -1595,7 +1595,10 @@ func touch(options: Array, _standard_input: String) -> Dictionary:
 		return {
 			"error": "la cible n'est pas un fichier"
 		}
+	print("path = '" + str(path) + "'.")
+	print("the parent of this path is = '" + str(path.parent) + "'.")
 	var parent = get_parent_element_from(path)
+	print("parent = '" + str(parent) + "'.")
 	if parent == null or not parent.is_folder():
 		return {
 			"error": "le dossier du fichier à créer n'existe pas"

@@ -244,11 +244,11 @@ func read(input: String) -> Array:
 func _read_identifier(input: String, pos: int, length: int, count_equals_sign: bool) -> Dictionary:
 	var identifier := ""
 	if count_equals_sign: # we want to include "=" in the identifier
-		while pos < length and (not input[pos] in [" ", "$", ">", "<", ">>", "\n"]):
+		while pos < length and (not input[pos] in [" ", "$", ">", "<", ">>", "\n", ";"]):
 			identifier += input[pos]
 			pos += 1
 	else: # we don't want to include the "=" in the indentifier (hence stopping as soon as we encounter one)
-		while pos < length and (not input[pos] in [" ", "$", ">", "<", ">>", "=", "\n"]):
+		while pos < length and (not input[pos] in [" ", "$", ">", "<", ">>", "=", "\n", ";"]):
 			identifier += input[pos]
 			pos += 1
 	return {

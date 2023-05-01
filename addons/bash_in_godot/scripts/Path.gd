@@ -6,6 +6,7 @@ const PATH_REGEX = "^(?<travelback>(?:\\.{0,2}\\/?)*)(?<name>[\\w\\-]+\\/?)*(?<e
 
 var path: String # An IMMUTABLE path
 var parent = null # a String or null if it has no parent. Example of a path without parent: "yoyo", contrary to "/yoyo"
+var base_dir = null # the whole path, except the last segment, null if the path is just "yoyo" for example
 var file_name = null
 var type: int # 0 for file, 1 for folder
 var segments := []
@@ -24,6 +25,7 @@ func _init(p: String):
 	if is_valid:
 		segments = path.split("/", false)
 		parent = segments[segments.size() - 2] if segments.size() > 1 else null
+		base_dir = path.left(path.find_last("/")) if path.find("/") != -1 else null
 		if type == 1:
 			file_name = segments[segments.size() - 1] if segments.size() >= 1 else null
 		else:

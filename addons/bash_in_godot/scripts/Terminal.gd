@@ -2,7 +2,24 @@
 extends Object
 class_name Terminal
 
-const HELP_TEXT := "Ce terminal vous permet d'écrire des commandes Bash simplifiées.\nLe but est pédagogique. Vous pouvez apprendre des commandes et vous entrainer.\nLes commandes ont été reproduites le plus fidèlement possible, mais quelques différences peuvent apparaître.\n\nRappels sur comment écrire une commande :\nUne commande vous permet de manipuler les fichiers et dossiers de votre environnement de travail.\nEn règle générale, la syntaxe pour une commande ressemble à ça : [b]nom_de_la_commande[/b] [...[b]options[/b]] [...[b]arguments[/b]].\n\nUtilisez des redirections pour modifier le comportement d'une commande. Une redirection est un numéro : \n- 0 : entrée standard\n- 1 : sortie standard\n- 2 : sortie d'erreur\nExemple : head file.txt 1>resultat.txt (réécris, ou crée, le fichier \"resultat.txt\" avec le résultat écrit de la commande).\nUtilisez les symboles :\n- > : réécris le fichier\n- < : lis le fichier\n- >> : ajoute au fichier\n\nEnchainez des commandes sur la même ligne en les séparant par un \"|\" (\"pipe\" en anglais).\nL'entrée standard de la commande suivante sera le résultat écrit de la commande précédente.\nExemple : echo yoyo | cat"
+const HELP_TEXT := "Ce terminal vous permet d'écrire des commandes Bash simplifiées.\n" \
+	+ "Le but est pédagogique. Vous pouvez apprendre des commandes et vous entrainer.\n" \
+	+ "Les commandes ont été reproduites le plus fidèlement possible, mais quelques différences peuvent apparaître.\n\n" \
+	+ "Rappels sur comment écrire une commande :\n" \
+	+ "Une commande vous permet de manipuler les fichiers et dossiers de votre environnement de travail.\n" \
+	+ "En règle générale, la syntaxe pour une commande ressemble à ça : [b]nom_de_la_commande[/b] [...[b]options[/b]] [...[b]arguments[/b]].\n\n" \
+	+ "Utilisez des redirections pour modifier le comportement d'une commande. Une redirection est un numéro : \n" \
+	+ "- 0 : entrée standard\n" \
+	+ "- 1 : sortie standard\n" \
+	+ "- 2 : sortie d'erreur\n" \
+	+ "Exemple : head file.txt 1>resultat.txt (réécris, ou crée, le fichier \"resultat.txt\" avec le résultat écrit de la commande).\n" \
+	+ "Utilisez les symboles :\n" \
+	+ "- > : réécris le fichier\n" \
+	+ "- < : lis le fichier\n" \
+	+ "- >> : ajoute au fichier\n\n" \
+	+ "Enchainez des commandes sur la même ligne en les séparant par un \"|\" (\"pipe\" en anglais).\n" \
+	+ "L'entrée standard de la commande suivante sera le résultat écrit de la commande précédente.\n" \
+	+ "Exemple : echo yoyo | cat"
 
 # The signal `interface_changed` can be used to read the standard output of a successful command.
 # It is different from `command_executed` because `command_executed` might be thrown several times in a row.
@@ -113,7 +130,7 @@ var COMMANDS := {
 				"[b]tr[/b] [u]pattern[/u] [u]remplacement[/u]",
 				"[b]tr[/b] [b]-d[/b] [u]pattern[/u]"
 			],
-			"description": "Remplace le pattern par la chaine de remplacement donné. Si l'option -d est précisée, toutes les occurrences du pattern seront supprimées. Le résultat est affiché dans la sortie standard.",
+			"description": "Remplace le pattern par la chaine de remplacement donnée. Si l'option -d est précisée, toutes les occurrences du pattern seront supprimées. Le résultat est affiché dans la sortie standard.",
 			"options": [
 				{
 					"name": "-d",
@@ -145,7 +162,7 @@ var COMMANDS := {
 		"manual": {
 			"name": "ls - liste le contenu d'un dossier.",
 			"synopsis": ["[b]ls[/b] [[b]-a[/b]] [[b]-l[/b]] [[u]dossier[/u]]"],
-			"description": "La commande va lister le contenu des dossiers, en colorant en vert les dossiers, et en blanc les fichiers. Par défaut, les fichiers et dossiers cachés (c'est-à-dire ceux préfixés par un point) ne serront pas affichés. Pour les afficher, utilisez l'option -a.",
+			"description": "La commande va lister le contenu des dossiers, en colorant en vert les dossiers, et en blanc les fichiers. Par défaut, les fichiers et dossiers cachés (c'est-à-dire ceux préfixés par un point) ne seront pas affichés. Pour les afficher, utilisez l'option -a.",
 			"options": [
 				{
 					"name": "-a",
@@ -189,9 +206,9 @@ var COMMANDS := {
 		"allowed": true,
 		"reference": funcref(self, "cd"),
 		"manual": {
-			"name": "cd - définis le chemin courant comme étant la cible.",
+			"name": "cd - définit le chemin courant comme étant la cible.",
 			"synopsis": ["[b]cd[/b] [[u]chemin[/u]]"],
-			"description": "Définis la variable $PWD comme étant le chemin absolu de la destination ciblée par le chemin donné. Ne pas donner de chemin revient à écrire la racine, \"/\".",
+			"description": "Définit la variable $PWD comme étant le chemin absolu de la destination ciblée par le chemin donné. Ne pas donner de chemin revient à écrire la racine, \"/\".",
 			"options": [],
 			"examples": [
 				"cd folder",
@@ -253,7 +270,7 @@ var COMMANDS := {
 		"allowed": true,
 		"reference": funcref(self, "cp"),
 		"manual": {
-			"name": "cp - copie un élément vers une aute destination.",
+			"name": "cp - copie un élément vers une autre destination.",
 			"synopsis": ["[b]cp[/b] [u]origine[/u] [u]destination[/u]"],
 			"options": [],
 			"description": "Réalise la copie de l'élément d'origine vers la nouvelle destination. La copie devient indépendante de l'originale. Si une copie d'un dossier vers un autre dossier est réalisée, et que cet autre dossier contient des fichiers de même nom que le premier, alors ces fichiers seront remplacés, leur contenu ainsi perdu.",
@@ -285,7 +302,7 @@ var COMMANDS := {
 		"manual": {
 			"name": "help - commande si vous avez besoin d'aide quant à Bash.",
 			"synopsis": ["[b]help[/b]"],
-			"description": "Utilisez cette commande si vous avez besoin de rappel quant au fonctionnement primaire de Bash. La commande vous propose également une liste de toutes les commandes disponibles, avec une rapide description de chacune.",
+			"description": "Utilisez cette commande si vous avez besoin de rappels quant au fonctionnement primaire de Bash. La commande vous propose également une liste de toutes les commandes disponibles, avec une rapide description de chacune.",
 			"options": [],
 			"examples": []
 		}
@@ -305,9 +322,9 @@ var COMMANDS := {
 		"allowed": true,
 		"reference": funcref(self, "chmod"),
 		"manual": {
-			"name": "chmod - définis les permissions accordées à un élément.",
+			"name": "chmod - définit les permissions accordées à un élément.",
 			"synopsis": ["[b]chmod[/b] [u]mode[/u] [u]fichier[/u]"],
-			"description": "Il y a trois catégories (utilisateur, groupe, autres) qui ont chacune trois type d'autorisations : lecture (r), écriture (w), exécution/franchissement (x). Les permissions s'écrivent \"-rwx--xr--\" où le premier caractère est soit \"d\" pour un dossier, ou \"-\" pour un fichier et où l'utilisateur a les droits combinés \"rwx\" (lecture, écriture et exécution) et où le groupe a les droits d'exécution seulement et les autres le droit de lecture uniquement. En règle générale, les permissions sont données sous la forme de trois chiffres en octal dont la somme est une combinaison unique : 4 pour la lecture, 2 pour l'écriture et 1 pour l'exécution. Par défaut un fichier, à sa création, a les droits 644. Accordez ou retirez un droit spécifique avec \"chmod u+x file.txt\" (raccourcie en \"chmod +x file.txt\" quand il s'agit de l'utilisateur, ([b]u[/b] pour utilisateur, [b]g[/b] pour groupe, [b]o[/b] pour autres)), ou détaillez la règle en octal à appliquer sur les trois catégories (\"chmod 657 file.txt\").",
+			"description": "Il y a trois catégories (utilisateur, groupe, autres) qui ont chacune trois types d'autorisations : lecture (r), écriture (w), exécution/franchissement (x). Les permissions s'écrivent \"-rwx--xr--\" où le premier caractère est soit \"d\" pour un dossier, ou \"-\" pour un fichier et où l'utilisateur a les droits combinés \"rwx\" (lecture, écriture et exécution) et où le groupe a les droits d'exécution seulement et les autres le droit de lecture uniquement. En règle générale, les permissions sont données sous la forme de trois chiffres en octal dont la somme est une combinaison unique : 4 pour la lecture, 2 pour l'écriture et 1 pour l'exécution. Par défaut un fichier, à sa création, a les droits 644. Accordez ou retirez un droit spécifique avec \"chmod u+x file.txt\" (raccourcie en \"chmod +x file.txt\" quand il s'agit de l'utilisateur, ([b]u[/b] pour utilisateur, [b]g[/b] pour groupe, [b]o[/b] pour autres)), ou détaillez la règle en octal à appliquer sur les trois catégories (\"chmod 657 file.txt\").",
 			"options": [],
 			"examples": [
 				"chmod u+x file.txt",
@@ -323,7 +340,7 @@ var COMMANDS := {
 		"manual": {
 			"name": "nano - ouvre un éditeur pour éditer un fichier dans le terminal.",
 			"synopsis": ["[b]nano[/b] [u]fichier[/u]"],
-			"description": "Nano est l'éditeur par défaut de Bash. Utilisez cette commande pour éditer un fichier déjà existant. Si le fichier cible n'existe pas il sera créé. La version de Nano proposée ici est modifiée pour convenir à une utilisation à la souris.",
+			"description": "Nano est l'éditeur par défaut de Bash. Utilisez cette commande pour éditer un fichier déjà existant. Si le fichier cible n'existe pas, il sera créé. La version de Nano proposée ici est modifiée pour convenir à une utilisation à la souris.",
 			"options": [],
 			"examples": [
 				"nano file.txt"
@@ -334,7 +351,7 @@ var COMMANDS := {
 		"allowed": true,
 		"reference": funcref(self, "seq"),
 		"manual": {
-			"name": "seq - affiche une séquence de nombre.",
+			"name": "seq - affiche une séquence de nombres.",
 			"synopsis": ["[b]seq[/b] [[b]-s[/b] [u]string[/u]] [[b]-t[/b] [u]string[/u]] [[u]début[/u] [[u]saut[/u]]] [u]fin[/u]"],
 			"description": "Affiche une séquence de nombres, avec un nombre par ligne. La séquence commence à 1 par défaut et s'incrémente de 1 par défaut (le \"saut\" est de 1). Si la fin est inférieure au début, le saut sera par défaut de -1. Si le saut donné n'est pas négatif, une erreur sera renvoyée. Le séparateur entre chaque nombre peut être défini avec l'option -s, et la fin de la séquence peut être personnalisée avec l'option -t.",
 			"options": [
@@ -427,18 +444,18 @@ var COMMANDS := {
 				},
 				{
 					"name": "f",
-					"description": "Sélectionne un champs par un délimiteur particulier donné par l'option '-d'."
+					"description": "Sélectionne un champ par un délimiteur particulier donné par l'option '-d'."
 				},
 				{
 					"name": "d",
-					"description": "Définis un délimiteur particulier avec lequel désigner des champs à sélectionner."
+					"description": "Définit un délimiteur particulier avec lequel désigner des champs à sélectionner."
 				}
 			],
 			"examples": [
 				"cat fichier.csv | cut -c 5 # sélectionne le 5e caractère",
 				"cat fichier.csv | cut -c 5,10 # sélectionne le 5e et le 10e caractère",
 				"cat fichier.csv | cut -c 5-10 # sélectionne les caractères de la position 5 à 10",
-				"cat fichier.csv | cut -f 2 -d ',' # sélectionne le 2e champs séparé par une virgule",
+				"cat fichier.csv | cut -f 2 -d ',' # sélectionne le 2e champ séparé par une virgule",
 				"cat fichier.csv | cut -f 2,3,5-8 -d ',' # sélectionne le 2e et 3e champs, puis du 5e au 8e."
 			]
 		}
@@ -447,9 +464,9 @@ var COMMANDS := {
 		"allowed": true,
 		"reference": funcref(self, "startm99"),
 		"manual": {
-			"name": "startm99 - commande custom pour démarrer un simulateur de langage Assembler appelé M99.",
+			"name": "startm99 - commande custom pour démarrer un simulateur de langage tel que Assembler appelé M99.",
 			"synopsis": ["[b]startm99[/b]"],
-			"description": "Démarre un simulateur pédadogique pour apprendre les bases d'un langage Assembler.",
+			"description": "Démarre un simulateur pédagogique pour apprendre les bases de l'Assembler.",
 			"options": [],
 			"examples": []
 		}

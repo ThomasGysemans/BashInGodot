@@ -931,7 +931,7 @@ window/size/height=720
 
 [editor_plugins]
 
-enabled=PoolStringArray( "res://addons/bash_in_godot/plugin.cfg", "res://addons/gdUnit3/plugin.cfg" )
+enabled=PoolStringArray( "res://addons/gdUnit3/plugin.cfg" )
 
 [global]
 

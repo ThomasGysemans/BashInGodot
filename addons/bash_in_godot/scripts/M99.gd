@@ -19,7 +19,25 @@ signal program_failed (starting_point)
 signal on_cell_set (position, value)
 signal on_program_filled (position, program)
 
-var help_text := "L'aide a été ouverte.\nTapez la commande \"show\" pour en sortir.\n\nLe M99 est une simulation théorique du langage Assembler.\nPour faire simple, il s'agit d'instructions très basiques qui à elles seules\nreprésentent toutes les opérations successives que peut réaliser un processeur.\nLes instructions sont représentées en 3 nombres dont la signification est affichée dans le Mémo.\nVous pouvez également les écrire dans leur équivalent mnémonique.\nPar exemple : \"199 299 400 599\" = \"LDA 99 LDB 99 ADD HLT\".\n\nDans le M99, la position d'une cellule se compose de deux chiffres : x et y.\nLa première cellule est 00, la dernière est 99.\nLe premier chiffre correspond à la ligne horizontale, celle du haut,\net le second chiffre à la ligne de gauche, celle verticale.\n\nPour sauvegarder des constantes, utilisez les \"registres\" A ou B,\nou stockez directement la valeur dans une cellule\ninaccessible choisie avec l'instruction STR.\n\nPour manipuler des données entrées par un utilisateur, remplissez le tableau des entrées,\net le programme lira chacune des entrées quand demandé par LDA 99 ou LDB 99.\n\n" + ("\n".join(MEMO)) + "\n\nCi-dessous la liste des commandes possibles.\nEntrez \"man nom_de_la_commande\" pour avoir de l'aide sur une commande particulière."
+var help_text := "L'aide a été ouverte.\n" \
+	+ "Tapez la commande \"show\" pour en sortir.\n\n" \
+	+ "Le M99 est une simulation théorique du langage Assembler.\n" \
+	+ "Pour faire simple, il s'agit d'instructions très basiques qui à elles seules\n" \
+	+ "représentent toutes les opérations successives que peut réaliser un processeur.\n" \
+	+ "Les instructions sont représentées en 3 nombres dont la signification est affichée dans le Mémo.\n" \
+	+ "Vous pouvez également les écrire dans leur équivalent mnémonique.\n" \
+	+ "Par exemple : \"199 299 400 599\" = \"LDA 99 LDB 99 ADD HLT\".\n\n" \
+	+ "Dans le M99, la position d'une cellule se compose de deux chiffres : x et y.\n" \
+	+ "La première cellule est 00, la dernière est 99.\n" \
+	+ "Le premier chiffre correspond à la ligne horizontale, celle du haut,\n" \
+	+ "et le second chiffre à la ligne de gauche, celle verticale.\n\n" \
+	+ "Pour sauvegarder des constantes, utilisez les \"registres\" A ou B,\n" \
+	+ "ou stockez directement la valeur dans une cellule\n" \
+	+ "inaccessible choisie avec l'instruction STR.\n\n" \
+	+ "Pour manipuler des données entrées par un utilisateur, remplissez le tableau des entrées,\n" \
+	+ "et le programme lira chacune des entrées quand demandé par LDA 99 ou LDB 99.\n\n" + ("\n".join(MEMO)) + "\n\n" \
+	+ "Ci-dessous la liste des commandes possibles.\n" \
+	+ "Entrez \"man nom_de_la_commande\" pour avoir de l'aide sur une commande particulière."
 
 var started := false
 var PROGRAM = null
@@ -64,9 +82,9 @@ var COMMANDS := {
 	"set": {
 		"reference": funcref(self, "setm99"),
 		"manual": {
-			"name": "set - définis une cellule.",
+			"name": "set - définit une cellule.",
 			"synopsis": ["[b]set[/b] [u]position[/u] [u]commande[/u]"],
-			"description": "Définis la valeur d'une cellule du programme à une certaine position tout en vérifiant la validité syntaxique de la commande.",
+			"description": "Définit la valeur d'une cellule du programme à une certaine position tout en vérifiant la validité syntaxique de la commande.",
 			"options": [],
 			"examples": [
 				"set 05 LDA 99",
@@ -77,7 +95,7 @@ var COMMANDS := {
 	"fill": {
 		"reference": funcref(self, "fillm99"),
 		"manual": {
-			"name": "fill - définis plusieurs cellules avec les commandes données.",
+			"name": "fill - définit plusieurs cellules avec les commandes données.",
 			"synopsis": ["[b]fill[/b] [u]position[/u] [u]...commandes[/u]"],
 			"description": "À une position donnée seront placées les commandes données. La syntaxe des commandes est également vérifiée, à la même manière que la commande \"set\".",
 			"options": [],
@@ -142,7 +160,7 @@ var COMMANDS := {
 		"manual": {
 			"name": "set_inputs - insère une suite d'entrées que le programme pourra utiliser.",
 			"synopsis": ["[b]set_inputs[/b] [u]...entrées[/u]"],
-			"description": "Définis les entrées que le programme utilisera lorsque une demande à la cellule 99 sera réalisée avec LDA ou LDB.",
+			"description": "Définit les entrées que le programme utilisera lorsqu'une demande à la cellule 99 sera réalisée avec LDA ou LDB.",
 			"options": [],
 			"examples": [
 				"set_inputs 1 2 3"

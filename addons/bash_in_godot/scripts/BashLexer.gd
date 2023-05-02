@@ -82,6 +82,7 @@ func read(input: String) -> Array:
 					error = "Erreur de syntaxe : une substitution de commande n'a pas été fermée."
 					return []
 				result.append(BashToken.new(Tokens.SUBSTITUTION, subtitution_content))
+				continue
 			else:
 				var name = _read_identifier(input, pos, length, false)
 				if name.token.value.is_valid_identifier():

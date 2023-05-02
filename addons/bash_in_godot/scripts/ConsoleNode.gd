@@ -109,6 +109,9 @@ func _process(_delta):
 			else:
 				word_to_complete = full_path
 			var element = terminal.get_parent_element_from(PathObject.new(full_path)) if not word_to_complete.empty() else terminal.get_file_element_at(PathObject.new(full_path))
+			# the user keeps writing down a path that doesn't even exist:
+			if element == null:
+				return
 			if not element.can_read():
 				return # cannot autocomplete with the files contained in a folder we can't read from
 			for child in element.children:

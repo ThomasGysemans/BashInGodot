@@ -16,6 +16,7 @@ margin_right = -64.0
 margin_bottom = -64.0
 popup_exclusive = true
 window_title = "nano"
+resizable = true
 
 [node name="TextEdit" type="TextEdit" parent="."]
 anchor_right = 1.0

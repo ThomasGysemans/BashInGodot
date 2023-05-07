@@ -1,6 +1,6 @@
 # BashInGodot
 
-A Bash Terminal in your Godot Game.
+A Bash Terminal in your Godot **3.5** Game.
 
 > **IMPORTANT** : the text is written in French.
 
@@ -30,7 +30,7 @@ A demo is available online : [https://learn-bash.sciencesky.fr/](https://learn-b
 
 ## Introduction
 
-A custom Bash parser was created to customise the behaviour of Bash and to make it easier to learn. A few differences remain between the real Bash and my implementation.
+A custom Bash parser was created to customise the behaviour of Bash and to make it easier to learn. A few differences remain between the real Bash and my implementation. **This is not meant to be a serious thing as it was built for a simple school project.**
 
 #### Available Bash Features
 
@@ -70,17 +70,17 @@ And some other things that i didn't quote.
 
 ### Class Names
 
-- `BashContext`
-- `BashParser`
-- `BashToken`
-- `DNS`
-- `ErrorHandler`
-- `M99`
-- `PathObject`
-- `System`
-- `SystemElement`
-- `Terminal`
-- `Tokens`
+- [BashContext](./addons/bash_in_godot/scripts/BashContext.gd)
+- [BashParser](./addons/bash_in_godot/scripts/BashParser.gd)
+- [BashToken](./addons/bash_in_godot/scripts/BashToken.gd)
+- [DNS](./addons/bash_in_godot/scripts/DNS.gd)
+- [ErrorHandler](./addons/bash_in_godot/scripts/ErrorHandler.gd)
+- [M99](./addons/bash_in_godot/scripts/M99.gd)
+- [PathObject](./addons/bash_in_godot/scripts/Path.gd)
+- [System](./addons/bash_in_godot/scripts/System.gd)
+- [SystemElement](./addons/bash_in_godot/scripts/SystemElement.gd)
+- [Terminal](./addons/bash_in_godot/scripts/Terminal.gd)
+- [Tokens](./addons/bash_in_godot/scripts/Tokens.gd)
 
 ## How it works
 
@@ -191,13 +191,13 @@ On the `ConsoleNode` you can use the following methods:
 
 To customise a `Console` node, you can use its export variables :
 
-- `User Name` (String)
-- `Group Name` (String)
-- `IP Address` (String)
-- `System Reference Node` (NodePath), see [Create your file structure](#create-your-file-structure)
-- `PID` (int, -1 for random one)
-- `Max Paragraph Size` (int, -1 for default one, which is 50)
-- `Default Font Size` (int, 14 by default)
+- `user_name` (String)
+- `group_name` (String)
+- `ip_address` (String)
+- `system` (NodePath), see [Create your file structure](#create-your-file-structure)
+- `pid` (int, -1 for random one)
+- `max_paragraph_size` (int, -1 for default one, which is 50)
+- `default_font_size` (int, 14 by default)
 
 **Notes**:
 
@@ -382,18 +382,18 @@ Customise it with these methods:
 
 |Name|Description|
 |----|-----------|
+|`static remove_bbcode(text: String) -> String`|Returns `text` without bbcode.|
 |`static replace_bbcode(text: String, replacement: String) -> String`|Replaces the bbcode contained in the `text` with `replacement`.|
 |`static cut_paragraph(paragraph: String, line_length: int) -> Array`|Cuts the paragraph in order to respect a precise limit of characters for each line. It does not break a word, but instead goes on above the limit until it reaches either the end of the input or a white space.|
 |`static build_manual_page_using(manual: Dictionary, max_size: int) -> String`|This function builds a nice looking UI from the manual of a command.|
 |`static build_help_page(text: String, commands: Dictionary) -> String`|Builds the help page based on the given text and commands. The help page will list all the available commands at the end.|
 |`set_editor(editor: WindowDialog) -> void`|Defines what editor to use for the `nano` command.|
 |`set_dns(d: DNS) -> void`|Defines what DNS configuration to use.|
-|`use_interface(interface: RichTextLabel) -> void`|Even though the Terminal doesn't print anything to the interface, it's mandatory for the M99.|
 |`set_custom_text_width(max_char: int) -> void`|Defines the maximum length for the description section of the manual page.|
 |`set_ip_address(ip: String) -> bool`|In order to use the `ping` command, the Terminal needs to have an IP address. Returns `false` if the IP is not valid.|
 |`set_allowed_commands(commands: Array) -> void`|Define what commands are allowed. See [Allowing or Disabling Commands](#allowing-or-disabling-commands) for more details.|
 |`forbid_commands(commands: Array) -> void`|Forbid commands. See [Allowing or Disabling Commands](#allowing-or-disabling-commands) for more details.|
-|`execute(input: String, interface: RichTextLabel = null) -> Dictionary`|Executes the given command. If the command is a script execution, then it tries to execute it. If the command is a M99 command, it will execute it too (if it was started, obviously). Returns a dictionary with key `outputs` which is an array. Each array element represents the result of an independent command whose output should be printed to the screen, it is a dictionary with key `error` which contains an explanation of what went wrong, otherwise `error` is null and the return value is a dictionary with the following keys: `text` (what needs to be printed to the interface) and `interface_cleared` (a boolean that says `true` if the `clear` command was used).|
+|`execute(input: String, interface: RichTextLabel = null, can_change_interface := true) -> Dictionary`|Executes the given command. If the command is a script execution, then it tries to execute it. If the command is a M99 command, it will execute it too (if it was started, obviously). Returns a dictionary with key `outputs` which is an array. Each array element represents the result of an independent command whose output should be printed to the screen, it is a dictionary with key `error` which contains an explanation of what went wrong, otherwise `error` is null and the return value is a dictionary with the following keys: `text` (what needs to be printed to the interface) and `interface_cleared` (a boolean that says `true` if the `clear` command was used). Finally, "can_change_interface" is set to false when executing a substitution or a for loop so that the commands inside these don't trigger the `interface_changed` signal.|
 |`execute_file(file: SystemElement, options: Array, interpreted_redirections: Array, interface: RichTextLabel = null) -> Dictionary`|Executes a script. You should use the `execute` command for this unless you know exactly what you're doing.|
 |`execute_m99_command(command_name: String, options: Array, interface: RichTextLabel = null) -> Dictionary`|Executes a M99 command. Same as `execute_file` you should use `execute` instead.|
 |`get_file_element_at(path: PathObject)`|Gets a file element according to the given path. If an error occured, the `error_handler` property will have an error (`error_handler.has_error` set to `true`). If the destination doesn't exist or if an error occured, it will return `null`, otherwise an instance of `SystemElement`.|
@@ -410,7 +410,7 @@ Customise it with these methods:
 
 The `System` instance from `Terminal` is a property named `system` and the root is a property from `System` which is named `root`. As a consequence, if you want to get the instance of root from your Terminal, type `my_terminal.system.root`.
 
-Finally, all the variables are stored within the `runtime` property, which is an array of `BashContext`s. You may want to look the file directly and read the comments for more details: [BashContext](./addons/bash_in_godot/scripts/BashContext.gd).
+Finally, all the variables are stored within the `runtime` property, which is an array of `BashContext`s. You may want to look the file directly and read the comments for more details: [BashContext](./addons/bash_in_godot/scripts/BashContext.gd). Share a common runtime between multiple consoles using the Reference Node. See the example in [demo-system.gd](./demo-system.gd).
 
 ## Signals
 
@@ -458,7 +458,7 @@ Emitted when the `cd` command is used.
 
 - `interface_changed (content)`
 
-Emitted when something needs to be printed onto the screen. It is not emitted when the interface is cleared.
+Emitted when something needs to be printed to the screen. It is not emitted when the interface is cleared, it is not emitted inside for loop, nor substitutions.
 
 The signal `interface_changed` can be used to read the standard output of a successful command. It is different from `command_executed` because `command_executed` might be thrown several times in a row. Indeed, several commands can be on the same line separated by pipes.
 

@@ -54,7 +54,6 @@ signal script_executed (script, output) # emitted when a script was executed. `s
 signal help_asked # emitted when the custom `help` command is used.
 signal interface_cleared
 
-var interface_reference = null # RichTextLabel
 var max_paragraph_width := 50
 var nano_editor = null
 var edited_file = null
@@ -482,6 +481,9 @@ static func replace_bbcode(text: String, replacement: String) -> String:
 		result = result.replace(r.get_string(), replacement)
 	return result
 
+static func remove_bbcode(text: String) -> String:
+	return replace_bbcode(text, "")
+
 static func cut_paragraph(paragraph: String, line_length: int) -> Array:
 	if paragraph.length() <= line_length:
 		return [paragraph]
@@ -549,15 +551,13 @@ func set_editor(editor: WindowDialog) -> void:
 		# then we want to make sure that the old editor
 		# doesn't receive the signals anymore.
 		(nano_editor.get_node("Button") as Button).disconnect("pressed", self, "_on_nano_saved")
-	var save_button: Button = (editor as WindowDialog).get_node("Button")
-	save_button.connect("pressed", self, "_on_nano_saved")
+		(nano_editor as WindowDialog).get_close_button().disconnect("pressed", self, "_on_nano_saved")
+	(editor as WindowDialog).get_node("Button").connect("pressed", self, "_on_nano_saved")
+	editor.get_close_button().connect("pressed", self, "_on_nano_saved")
 	nano_editor = editor
 
 func set_dns(d: DNS) -> void:
 	dns = d
-
-func use_interface(interface: RichTextLabel) -> void:
-	interface_reference = interface
 
 func set_custom_text_width(max_char: int) -> void:
 	max_paragraph_width = max_char
@@ -595,13 +595,6 @@ func _write_to_redirection(redirection: Dictionary, output: String) -> void:
 		redirection.target.content = output
 	elif redirection.type == Tokens.APPEND_WRITING_REDIRECTION:
 		redirection.target.content += output
-
-func _save_interface(interface: RichTextLabel):
-	if interface == null:
-		interface = interface_reference # if no interface is given to this function, then use the previous one
-	else:
-		interface_reference = interface # if an interface is given, then save it
-	return interface
 
 # Give as input the parsing result of a command.
 # Let's take for example `cat $(echo file.txt)`
@@ -660,7 +653,6 @@ func interpret_one_substitution(token: BashToken) -> Dictionary:
 # If the commands fails, then this function will return { "error": String }.
 # Otherwise, it will return { "error": null, "output": String, "interface_cleard": bool } 
 func execute(input: String, interface: RichTextLabel = null, can_change_interface := true) -> Dictionary:
-	interface = _save_interface(interface)
 	var lexer := BashLexer.new(input)
 	if not lexer.error.empty():
 		return {
@@ -689,7 +681,8 @@ func _execute_tokens(tokens: Array, interface: RichTextLabel = null, can_change_
 	var standard_input := "" # the last standard output
 	var cleared := false
 	for node in parsing:
-		for command in node:
+		for z in range(0, node.size()):
+			var command = node[z]
 			if command.type == "command":
 				if m99.started:
 					if not command.redirections.empty():
@@ -698,7 +691,7 @@ func _execute_tokens(tokens: Array, interface: RichTextLabel = null, can_change_
 								"error": "M99 n'accepte aucune redirection."
 							}]
 						}
-					return execute_m99_command(command.name, command.options, interface)
+					return execute_m99_command(command.name, command.options)
 				
 				# The interpretation of the variables must be done here.
 				# It could have been done during the parsing process but the for loops would not work properly.
@@ -767,7 +760,7 @@ func _execute_tokens(tokens: Array, interface: RichTextLabel = null, can_change_
 								"error": "Impossible de localiser, ni de créer, la destination du descripteur " + str(i) + "."
 							})
 							break
-					var result = function.reference.call_func(command.options, command_redirections[0].target.content if command_redirections[0] != null and command_redirections[0].type == Tokens.READING_REDIRECTION else standard_input)
+					var result = function.reference.call_func(command.options, command_redirections[0].target.content if command_redirections[0] != null and command_redirections[0].type == Tokens.READING_REDIRECTION else remove_bbcode(standard_input))
 					if command_redirections[2] != null:
 						if result.error == null:
 							if command_redirections[2].type == Tokens.WRITING_REDIRECTION:
@@ -788,7 +781,8 @@ func _execute_tokens(tokens: Array, interface: RichTextLabel = null, can_change_
 						standard_input = ""
 						break
 					else:
-						emit_signal("command_executed", command, result.output)
+						var output_without_bbcode = remove_bbcode(result.output)
+						emit_signal("command_executed", command, output_without_bbcode)
 						if m99.started:
 							if interface != null:
 								interface.text = ""
@@ -804,7 +798,8 @@ func _execute_tokens(tokens: Array, interface: RichTextLabel = null, can_change_
 							# then this function won't do anything.
 							_write_to_redirection(command_redirections[0], "")
 						if command_redirections[1] != null:
-							_write_to_redirection(command_redirections[1], result.output)
+							_write_to_redirection(command_redirections[1], output_without_bbcode)
+							standard_input = ""
 						else:
 							standard_input = result.output
 						if command.name == "clear":
@@ -831,6 +826,10 @@ func _execute_tokens(tokens: Array, interface: RichTextLabel = null, can_change_
 					variable_value = BashToken.new(Tokens.PLAIN, string_value)
 				var is_new = runtime[0].set_variable(command.name, variable_value)
 				emit_signal("variable_set", command.name, variable_value.value, is_new)
+			# If it's not the last command (if it's the second one in "command1 | command2 | command3" for example),
+			# then we don't want to keep the bbcode in the standard input of the next command.
+			if (z + 1) < node.size():
+				standard_input = remove_bbcode(standard_input)
 		if cleared or not standard_input.empty():
 			if can_change_interface:
 				emit_signal("interface_changed", standard_input)
@@ -952,7 +951,6 @@ func _interpret_string(token: BashToken) -> BashToken:
 # We parse the whole file at once and go through each node.
 # After the parsing, we execute everything and exit as soon as there is an error.
 func execute_file(file: SystemElement, options: Array, redirections: Array, interface: RichTextLabel = null) -> Dictionary:
-	_save_interface(interface)
 	var result = execute(file.content, interface)
 	var cleared := false
 	var outputs := [] # we store all the outputs of the commands here
@@ -1037,8 +1035,7 @@ func _execute_for_loop(command: Dictionary) -> Dictionary:
 # Custom commands when using M99.
 # Exemple is : set 90 401
 # meaning set cell at pos 90 with value 401
-func execute_m99_command(command_name: String, options: Array, interface: RichTextLabel = null) -> Dictionary:
-	_save_interface(interface)
+func execute_m99_command(command_name: String, options: Array) -> Dictionary:
 	if command_name == "man":
 		var manual = man(options, "")
 		if manual.error != null:
@@ -1612,10 +1609,7 @@ func touch(options: Array, _standard_input: String) -> Dictionary:
 		return {
 			"error": "la cible n'est pas un fichier"
 		}
-	print("path = '" + str(path) + "'.")
-	print("the parent of this path is = '" + str(path.parent) + "'.")
 	var parent = get_parent_element_from(path)
-	print("parent = '" + str(parent) + "'.")
 	if parent == null or not parent.is_folder():
 		return {
 			"error": "le dossier du fichier à créer n'existe pas"
@@ -2546,10 +2540,6 @@ func startm99(options: Array, _standard_input: String) -> Dictionary:
 	if options.size() != 0:
 		return {
 			"error": "aucune option n'est attendue."
-		}
-	if interface_reference == null:
-		return {
-			"error": "une interface doit être définie."
 		}
 	if m99.PROGRAM == null:
 		m99.init_blank_M99()

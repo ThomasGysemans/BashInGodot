@@ -1,7 +1,7 @@
 #warning-ignore-all:return_value_discarded
 extends Panel
 
-const INIT_TEXT = "Terminal M100 1.0.\nLe terminal fait maison [b]simplifié[/b].\nEntrez \"help\" si vous avez besoin d'aide.\n-----------------\n"
+const INIT_TEXT = "Terminal M100 0.2.1\nLe terminal fait maison [b]simplifié[/b].\nEntrez \"help\" si vous avez besoin d'aide.\n-----------------\n"
 
 export(String) var user_name
 export(String) var group_name
@@ -77,12 +77,28 @@ func _ready():
 	set_font_size(default_font_size)
 
 func _process(_delta):
-	if Input.is_action_just_pressed("ui_up") and history_index > 0:
-		history_index -= 1
-		prompt.text = history[clamp(history_index, 0, history.size() - 1)]
+	# Before, when pressing "ui_up" or "ui_down",
+	# all consoles received the order,
+	# and acted accordingly.
+	# We need to know if the current prompt has the focus, but the behaviour is kinda weird,
+	# because the focus is lost before the _process function gets executed,
+	# so we can't test if the prompt has the focus, because it's already gone.
+	# For some reason, this behaviour only applies on "ui_up". 
+	if Input.is_action_just_pressed("ui_up"):
+		# When the focus is on Prompt, and then "ui_up" is pressed,
+		# and before this function gets executed,
+		# the interface, for some reason, receives the focus.
+		# Looks like a RichTextLabel can receive focus, whereas it should not... cause it's readonly...
+		if not (interface.has_focus() or prompt.has_focus()):
+			return
 		prompt.grab_focus()
-		prompt.set_cursor_position(prompt.text.length())
+		if history_index > 0:
+			history_index -= 1
+			prompt.text = history[clamp(history_index, 0, history.size() - 1)]
+			prompt.set_cursor_position(prompt.text.length())
 	if Input.is_action_just_pressed("ui_down"):
+		if not prompt.has_focus():
+			return
 		if history_index < history.size() - 1:
 			history_index += 1
 			prompt.text = history[history_index]
@@ -91,6 +107,7 @@ func _process(_delta):
 		elif prompt.text != "":
 			history_index += 1
 			prompt.clear()
+			prompt.grab_focus()
 	if Input.is_action_just_pressed("autocompletion"):
 		# we don't want autocompletion when the user is editing a file using nano
 		if terminal.edited_file != null:

@@ -90,7 +90,9 @@ func is_valid_token_in_for_loop() -> bool:
 
 func equals(another: BashToken) -> bool:
 	if self == another: return true
-	return self.type == another.type and self.value == another.value and self.metadata == another.metadata
+	return self.type == another.type \
+		and self.value == another.value \
+		and (self.metadata.hash() == another.metadata.hash() if self.metadata != null and another.metadata != null else true)
 
 func _to_string():
 	return "[" + type + ":" + str(value) + ("(" + str(metadata) + ")" if metadata != null else "") + "]"

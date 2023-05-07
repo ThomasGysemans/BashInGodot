@@ -1,7 +1,7 @@
 #warning-ignore-all:return_value_discarded
 extends Panel
 
-const INIT_TEXT = "Terminal M100 0.2.1\nLe terminal fait maison [b]simplifié[/b].\nEntrez \"help\" si vous avez besoin d'aide.\n-----------------\n"
+const INIT_TEXT = "Terminal M100 0.2.2\nLe terminal fait maison [b]simplifié[/b].\nEntrez \"help\" si vous avez besoin d'aide.\n-----------------\n"
 
 export(String) var user_name
 export(String) var group_name

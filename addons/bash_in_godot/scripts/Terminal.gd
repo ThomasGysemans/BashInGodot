@@ -14,8 +14,8 @@ const HELP_TEXT := "Ce terminal vous permet d'écrire des commandes Bash simplif
 	+ "- 2 : sortie d'erreur\n" \
 	+ "Exemple : head file.txt 1>resultat.txt (réécris, ou crée, le fichier \"resultat.txt\" avec le résultat écrit de la commande).\n" \
 	+ "Utilisez les symboles :\n" \
-	+ "- > : réécris le fichier\n" \
-	+ "- < : lis le fichier\n" \
+	+ "- > : réécrit le fichier\n" \
+	+ "- < : lit le fichier\n" \
 	+ "- >> : ajoute au fichier\n\n" \
 	+ "Enchainez des commandes sur la même ligne en les séparant par un \"|\" (\"pipe\" en anglais).\n" \
 	+ "L'entrée standard de la commande suivante sera le résultat écrit de la commande précédente.\n" \

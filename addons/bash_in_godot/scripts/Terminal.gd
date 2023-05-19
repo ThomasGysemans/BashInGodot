@@ -112,11 +112,12 @@ var COMMANDS := {
 		"reference": funcref(self, "grep"),
 		"manual": {
 			"name": "grep - cherche un pattern dans l'entrée standard.",
-			"synopsis": ["[b]grep[/b] [[b]-c[/b] [u]nombre[/u]] [u]pattern[/u]"],
+			"synopsis": ["[b]grep[/b] [[b]-c[/b] [u]nombre[/u]] [u]pattern[/u] [fichier]"],
 			"description": "Cherche dans l'entrée standard les lignes qui correspondent au pattern donné. Si le pattern n'y est pas trouvé, la ligne est ignorée. S'il est trouvé, elle est affichée et ce qui correspond au pattern est mis en évidence.",
 			"options": [],
 			"examples": [
-				"cat fichier.txt | grep hello"
+				"cat fichier.txt | grep hello",
+				"grep hello fichier.txt"
 			]
 		}
 	},
@@ -1335,20 +1336,43 @@ func echo(options: Array, _standard_input: String) -> Dictionary:
 	}
 
 func grep(options: Array, standard_input: String) -> Dictionary:
-	if standard_input.empty():
-		return {
-			"error": "Une entrée standard doit être spécifiée"
-		}
 	var pattern = null
 	var show_count := false
+	var input = null # will be String
 	for option in options:
-		if pattern != null:
-			return {
-				"error": "erreur de syntaxe, censé être : " + COMMANDS.grep.manual.synopsis
-			}
 		if option.is_word():
-			pattern = option.value
+			if pattern == null:
+				pattern = option.value
+			else:
+				if input == null:
+					var path = PathObject.new(option.value)
+					if not path.is_valid:
+						return {
+							"error": "chemin invalide."
+						}
+					var element = get_file_element_at(path)
+					if element == null:
+						return {
+							"error": _display_error_or("la destination n'existe pas")
+						}
+					if element.is_folder():
+						return {
+							"error": "impossible de lire un dossier"
+						}
+					if not element.can_read():
+						return {
+							"error": "permission refusée"
+						}
+					input = element.content
+				else:
+					return {
+						"error": "erreur de syntaxe, argument inattendu"
+					}
 		elif option.is_flag():
+			if input != null or pattern != null:
+				return {
+					"error": "l'option devrait être au début de la commande"
+				}
 			if option.value == "c":
 				show_count = true
 			else:
@@ -1363,9 +1387,11 @@ func grep(options: Array, standard_input: String) -> Dictionary:
 		return {
 			"error": "un pattern doit être spécifié."
 		}
+	if input == null:
+		input = standard_input
 	var regex := RegEx.new()
 	regex.compile(pattern)
-	var lines := standard_input.split("\n", false)
+	var lines: Array = input.split("\n", false)
 	var output := ""
 	if show_count:
 		var total := 0

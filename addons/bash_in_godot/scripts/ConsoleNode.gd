@@ -1,7 +1,7 @@
 #warning-ignore-all:return_value_discarded
 extends Panel
 
-const INIT_TEXT = "Terminal M100 0.2.2\nLe terminal fait maison [b]simplifié[/b].\nEntrez \"help\" si vous avez besoin d'aide.\n-----------------\n"
+const INIT_TEXT = "Terminal M100 " + TerminalVersion.VERSION + "\nLe terminal fait maison [b]simplifié[/b].\nEntrez \"help\" si vous avez besoin d'aide.\n-----------------\n"
 
 export(String) var user_name
 export(String) var group_name
@@ -77,6 +77,9 @@ func _ready():
 	set_font_size(default_font_size)
 
 func _process(_delta):
+	# Just make sure that the interface never has the focus
+	if interface.has_focus():
+		prompt.grab_focus()
 	# Before, when pressing "ui_up" or "ui_down",
 	# all consoles received the order,
 	# and acted accordingly.
@@ -92,7 +95,7 @@ func _process(_delta):
 		if not (interface.has_focus() or prompt.has_focus()):
 			return
 		prompt.grab_focus()
-		if history_index > 0:
+		if history_index > 0 and history.size() > 0:
 			history_index -= 1
 			prompt.text = history[clamp(history_index, 0, history.size() - 1)]
 			prompt.set_cursor_position(prompt.text.length())
@@ -119,10 +122,10 @@ func _process(_delta):
 			if word_position == -1:
 				word_position = 0
 			var full_path := prompt.text.right(word_position).strip_edges()
-			var base_dir := full_path.left(full_path.find("/")) + "/" if full_path.find("/") != -1 else ""
+			var base_dir := full_path.left(full_path.find_last("/")) + "/" if full_path.find("/") != -1 else ""
 			var word_to_complete := ""
 			if full_path.find("/") != -1:
-				word_to_complete = full_path.right(full_path.find("/") + 1)
+				word_to_complete = full_path.right(full_path.find_last("/") + 1)
 			else:
 				word_to_complete = full_path
 			var element = terminal.get_parent_element_from(PathObject.new(full_path)) if not word_to_complete.empty() else terminal.get_file_element_at(PathObject.new(full_path))

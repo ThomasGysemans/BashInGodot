@@ -630,7 +630,7 @@ func interpret_substitutions(options: Array) -> Dictionary:
 func interpret_one_substitution(token: BashToken) -> Dictionary:
 	var execution := execute(token.value, null, false)
 	# Because the execution possibly have multiple independant commands
-	# we have to make only one token out of everything.
+	# we have to make only one series of tokens out of everything.
 	var one_line_output := ""
 	for output in execution.outputs:
 		if output.error != null:
@@ -638,6 +638,7 @@ func interpret_one_substitution(token: BashToken) -> Dictionary:
 		else:
 			one_line_output += output.text.strip_edges() + " "
 	one_line_output = one_line_output.strip_edges()
+	one_line_output = remove_bbcode(one_line_output)
 	var splitted_token := _split_variable_value(one_line_output)
 	if not one_line_output.empty():
 		return {
@@ -941,8 +942,6 @@ func _interpret_string(token: BashToken) -> BashToken:
 			new_token.value += token.value[i]
 			i += 1
 	return new_token
-
-# todo: allow comments
 
 # Executes a script.
 # We assume that the given file is executable.
@@ -2181,7 +2180,7 @@ func ping(options: Array, _standard_input: String) -> Dictionary:
 		output += "64 octets depuis " + destination_ip + ": icmp_seq=0 ttl=55 temps=" + ("%.3f" % time) + " ms\n"
 	output += "--- " + entry.name + " statistiques du ping ---\n"
 	output += "5 paquets transmis, 5 paquets reçus, 0.0% de perte\n"
-	output += "round-trip min/avg/max/stddev = " + ("%.3f" % times.min()) + "/" + ("%.3f" % _avg(times)) + "/" + ("%.3f" % times.max()) + "/0.000 ms"
+	output += "round-trip min/avg/max/stddev = " + ("%.3f" % times.min()) + "/" + ("%.3f" % _avg(times)) + "/" + ("%.3f" % times.max()) + "/0.000 ms\n"
 	return {
 		"output": output,
 		"error": null

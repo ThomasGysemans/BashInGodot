@@ -724,11 +724,6 @@ _global_script_classes=[ {
 "language": "GDScript",
 "path": "res://test/scripts/TerminalTest.gd"
 }, {
-"base": "Object",
-"class": "TerminalVersion",
-"language": "GDScript",
-"path": "res://addons/bash_in_godot/scripts/TerminalVersion.gd"
-}, {
 "base": "Resource",
 "class": "TimeUnit",
 "language": "GDScript",
@@ -913,7 +908,6 @@ _global_script_class_icons={
 "SystemElement": "",
 "Terminal": "",
 "TerminalTest": "",
-"TerminalVersion": "",
 "TimeUnit": "",
 "Tokens": "",
 "ValueProvider": "",

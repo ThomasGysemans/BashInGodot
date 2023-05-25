@@ -1,7 +1,16 @@
 #warning-ignore-all:return_value_discarded
 extends Panel
 
-const INIT_TEXT = "Terminal M100 " + TerminalVersion.VERSION + "\nLe terminal fait maison [b]simplifié[/b].\nEntrez \"help\" si vous avez besoin d'aide.\n-----------------\n"
+var INIT_TEXT = "Terminal M100 " + getVersionOfPlugin() + "\nLe terminal fait maison [b]simplifié[/b].\nEntrez \"help\" si vous avez besoin d'aide.\n-----------------\n"
+
+static func getVersionOfPlugin():
+	var config = ConfigFile.new()
+	var err = config.load("res://addons/bash_in_godot/plugin.cfg")
+	if err != OK:
+		return ""
+	for value in config.get_sections():
+		return config.get_value(value, "version")
+	return "" # if I'm so stupid that I made the "version" property of the config file disappear.
 
 export(String) var user_name
 export(String) var group_name
